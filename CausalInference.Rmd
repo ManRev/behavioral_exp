@@ -1,0 +1,517 @@
+---
+title: "CRN Behavioral Experiment - Report on Fisherian Randomization"
+author: "Manon Revel"
+date: "3/28/2019"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+plot(cars)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+library(tidyverse)
+library(reshape2)
+library(lme4)
+library(corrplot)
+library(jtools)
+library(dotwhisker)
+library(broom)
+library('ggplot2')
+library('ri2')
+library('generics')
+library('pbapply')
+library(dplyr)
+```
+
+## Loading and Forming dataframes
+We are only including those who agreed to participate and finished the survey
+
+```{r}
+
+data <- read.csv(file="/Users/Manon/Desktop/Current/Projects/rexperimental_design/mitsloancounterfactualpolicy/cai_training.csv",header=TRUE, stringsAsFactors=FALSE)
+
+crn_experiment_data <- read.csv(file="/Users/Manon/Desktop/Current/Projects/behavioral_exp/final_data.csv")
+
+crn_experiment_data <- crn_experiment_data[ which(as.numeric(crn_experiment_data$Q3) <= 1940 & as.numeric(crn_experiment_data$Q3) > 1900 ),]
+
+nrow(crn_experiment_data)
+crn_trustworthy <- select(crn_experiment_data, starts_with("p")) %>% select(ends_with("_1")) %>% rowid_to_column(var = "ID")
+crn_false <- select(crn_experiment_data, starts_with("p")) %>% select(ends_with("_2")) %>% rowid_to_column(var = "ID")
+crn_credible <- select(crn_experiment_data, starts_with("p")) %>% select(ends_with("_3")) %>% rowid_to_column(var = "ID")
+crn_biased <- select(crn_experiment_data, starts_with("p")) %>% select(ends_with("_4")) %>% rowid_to_column(var = "ID")
+crn_informative <- select(crn_experiment_data, starts_with("p")) %>% select(ends_with("_5")) %>% rowid_to_column(var = "ID")
+
+```
+
+## Blocked Fisherian Randomization for CRNs (c2 & c3) vs. No CRNs (c1) for "informative". Change test_vec and _5 to look at the others measurements.  
+
+```{r}
+test_vec <- crn_informative
+y_0 <- c()
+y_1 <- c()
+dd <- c()
+block <- c()
+for (i in 1:nrow(test_vec)){
+  line <- test_vec[i,]
+  if (is.na(line$p1c1_5)==FALSE){
+    d = 0
+    y0 = line$p1c1_5
+    y1 = y0
+  }
+  else {
+    d = 1
+    if (is.na(line$p1c2_5)==FALSE) {y1 = line$p1c2_5}
+    if (is.na(line$p1c3_5)==FALSE) {y1 = line$p1c3_5}
+    y0 = y1
+  }
+  y_0 = append(y_0, y0)
+  y_1 = append(y_1, y1)
+  dd = append(dd, d)
+  block = append(block, i)
+}
+for (i in 1:nrow(test_vec)){
+  line <- test_vec[i,]
+  if (is.na(line$p2c1_5)==FALSE){
+    d = 0
+    y0 = line$p2c1_5
+    y1 = y0
+  }
+  else {
+    d = 1
+    if (is.na(line$p2c2_5)==FALSE) {y1 = line$p2c2_5}
+    if (is.na(line$p2c3_5)==FALSE) {y1 = line$p2c3_5}
+    y0 = y1
+  }
+  y_0 = append(y_0, y0)
+  y_1 = append(y_1, y1)
+  dd = append(dd, d)
+  block = append(block, i)
+}
+for (i in 1:nrow(test_vec)){
+  line <- test_vec[i,]
+  if (is.na(line$p3c1_5)==FALSE){
+    d = 0
+    y0 = line$p3c1_5
+    y1 = y0
+  }
+  else {
+    d = 1
+    if (is.na(line$p3c2_5)==FALSE) {y1 = line$p3c2_5}
+    if (is.na(line$p3c3_5)==FALSE) {y1 = line$p3c3_5}
+    y0 = y1
+  }
+  y_0 = append(y_0, y0)
+  y_1 = append(y_1, y1)
+  dd = append(dd, d)
+  block = append(block, i)
+}
+for (i in 1:nrow(test_vec)){
+  line <- test_vec[i,]
+  if (is.na(line$p4c1_5)==FALSE){
+    d = 0
+    y0 = line$p4c1_5
+    y1 = y0
+  }
+  else {
+    d = 1
+    if (is.na(line$p4c2_5)==FALSE) {y1 = line$p4c2_5}
+    if (is.na(line$p4c3_5)==FALSE) {y1 = line$p4c3_5}
+    y0 = y1
+  }
+  y_0 = append(y_0, y0)
+  y_1 = append(y_1, y1)
+  dd = append(dd, d)
+  block = append(block, i)
+}
+
+
+y_P <- data.frame(Y0 = y_0, D = dd, Block = block)
+y_P_C0 <- y_P[y_P$D==0, ]
+y_P_C0 <- y_P_C0$Y0
+y_P_C1 <- y_P[y_P$D==1, ]
+y_P_C1 <- y_P_C1$Y0
+
+# Declare the design
+declaration <- randomizr::declare_ra(N = nrow(y_P), blocks = block, 
+                                     block_m=rep(2,length(unique(y_P$Block))))
+
+# Proceed to the Randomization Inference
+out <- conduct_ri(Y0 ~ D,
+                  declaration = declaration,
+                  assignment = "D",
+                  sharp_hypothesis = 0,
+                  data = y_P, sims = 100)
+
+summary(out)
+plot(out)
+tidy(out)
+```
+
+##Fisherian Randomization for CNN for Mixed CRNs (c2) vs. Pol CRNs (c3)
+
+```{r}
+y_0 <- c()
+y_1 <- c()
+dd <- c()
+block <- c()
+for (i in 1:nrow(test_vec)){
+  line <- test_vec[i,]
+  if (is.na(line$p1c2_5)==FALSE){
+    d = 0
+    y0 = line$p1c2_5
+    y1 = y0
+    y_0 = append(y_0, y0)
+    y_1 = append(y_1, y1)
+    dd = append(dd, d)
+    block = append(block, i)
+  }
+  else {
+    if (is.na(line$p1c3_5)==FALSE) {y1 = line$p1c3_5
+    d = 1
+    y0 = y1
+    y_0 = append(y_0, y0)
+    y_1 = append(y_1, y1)
+    dd = append(dd, d)
+    block = append(block, i)}
+  }
+}
+y_P <- data.frame(Y0 = y_0, D = dd, Block = block)
+y_P_C0 <- y_P[y_P$D==0, ]
+y_P_C0 <- y_P_C0$Y0
+y_P_C1 <- y_P[y_P$D==1, ]
+y_P_C1 <- y_P_C1$Y0
+declaration_sb <- randomizr::declare_ra(N = nrow(y_P), m = nrow(y_P_C1))
+out <- conduct_ri(Y0 ~ D,
+                   declaration = declaration_sb,
+                   assignment = "D",
+                   sharp_hypothesis = 0,
+                   data = y_P, sims = 100)
+```
+#### Putting all different measures in one dataframe(output_measures), where the CRN condition is specified in a separate column itself. So we have a dataframe in which there are four rows for each user and you can see that user's answer to 5 different credibility questions for a publisher(Pub) and treatment condition(CRN).
+
+```{r, echo=FALSE}
+trustworthy_dummy <- trustworthy_cf %>% 
+  gather("CRN", value = "trustworthy", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+false_dummy <- false_cf %>% 
+  gather("CRN", value = "false", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+credible_dummy <- credible_cf %>% 
+  gather("CRN", value = "credible", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+biased_dummy <- biased_cf %>% 
+  gather("CRN", value = "biased", c1:c3) %>%
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3))
+
+informative_dummy <- informative_cf %>% 
+  gather("CRN", value = "informative", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+output_measures <- Reduce(function(x, y) merge(x, y, by = c("ID", "Pub", "CRN")), 
+                          list(informative_dummy, biased_dummy, credible_dummy, 
+                               false_dummy, trustworthy_dummy)) %>% arrange(-desc(ID))
+levels(output_measures$Pub) <- c("CNN", "FoxNews", "Atlantic", "SacBee")     
+
+# Extracting useful covariates 
+covariates <- crn_experiment_data %>% 
+  select(Q32, Q845_12:Q845_15, Q384_12:Q384_15, Q849_12:Q849_15) %>% 
+  rowid_to_column(var = "ID") %>%
+  rename(pol_leaning = Q32, familiar_Fox = Q845_12, familiar_Atlantic = Q845_13,
+         familiar_CNN = Q845_14, familiar_SacBee = Q845_15, truthful_Fox = Q384_12,
+         truthful_Atlantic = Q384_13, truthful_CNN = Q384_14, 
+         truthful_SacBee = Q384_15, trust_Fox = Q849_12, trust_Atlantic = Q849_13,
+         trust_CNN = Q849_14, trust_SacBee = Q849_15) %>%
+  mutate_at(funs(factor), .vars = -1) %>% mutate(Pub_familiar = NA)
+
+output_measures <- merge(output_measures, covariates, by = "ID")
+
+output_measures$Pub_familiar[output_measures$Pub == "CNN"] <- output_measures$familiar_CNN[output_measures$Pub == "CNN"]
+output_measures$Pub_familiar[output_measures$Pub == "FoxNews"] <- output_measures$familiar_Fox[output_measures$Pub == "FoxNews"]
+output_measures$Pub_familiar[output_measures$Pub == "Atlantic"] <- output_measures$familiar_Atlantic[output_measures$Pub == "Atlantic"]
+output_measures$Pub_familiar[output_measures$Pub == "SacBee"] <- output_measures$familiar_SacBee[output_measures$Pub == "SacBee"]
+output_measures$Pub_familiar <- as.factor(output_measures$Pub_familiar)
+levels(output_measures$Pub_familiar) <- c("No", "No", "Yes")
+output_measures <- output_measures %>% 
+  mutate(CRN_vs_NoCRN = 1/3*as.numeric(CRN == "c2") + 1/3*as.numeric(CRN == "c3") -
+           2/3 * as.numeric(CRN == "c1"),
+         Mixed_vs_Pol = 1/2*as.numeric(CRN == "c3") - 1/2*as.numeric(CRN == "c2"))
+output_measures$CRN_vs_NoCRN_standard <- scale(output_measures$CRN_vs_NoCRN)
+output_measures$Mixed_vs_Pol_standard <- scale(output_measures$Mixed_vs_Pol)
+kable(head(output_measures, n = 10))
+```
+
+## Blocked Fisherian Randomization with Random Effects Model for biased
+
+```{r}
+output_measures$D <- as.numeric(output_measures$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_measures), 
+                                     blocks = output_measures$ID,
+                                     block_m=rep(2,length(unique(output_measures$ID))))
+
+#vec <- c("PubCNN:D:Pub_familiarNo",
+#"PubFoxNews:D:Pub_familiarNo",
+#"PubAtlantic:D:Pub_familiarNo",
+#"PubSacBee:D:Pub_familiarNo",
+#"PubCNN:D:Pub_familiarYes",
+#"PubFoxNews:D:Pub_familiarYes",
+#"PubAtlantic:D:Pub_familiarYes",
+#"PubSacBee:D:Pub_familiarYes")
+
+vec <- c("PubSacBee:Pub_familiarNo:D",
+         "PubAtlantic:Pub_familiarYes:D",
+         "PubSacBee:Pub_familiarYes:D")
+for (k in vec) {
+  test_funciton <- function(output_measures) {trust_effect <- lmer(data = output_measures, formula = biased ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_measures, sims = 1000
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+```
+
+## Blocked Fisherian Randomization with Random Effects Model for biased per quantile
+```{r}
+print("first quantile")
+output_screener_q1$D <- as.numeric(output_screener_q1$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q1), 
+                                     blocks = output_screener_q1$ID,
+                                     block_m=rep(2,length(unique(output_screener_q1$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q1) {trust_effect <- lmer(data = output_screener_q1, formula = biased ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q1, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("second quartile")
+output_screener_q2$D <- as.numeric(output_screener_q2$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q2), 
+                                     blocks = output_screener_q2$ID,
+                                     block_m=rep(2,length(unique(output_screener_q2$ID))))
+
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q2) {trust_effect <- lmer(data = output_screener_q2, formula = biased ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q2, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("third quartile")
+output_screener_q3$D <- as.numeric(output_screener_q3$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q3),
+                                     blocks = output_screener_q3$ID,
+                                     block_m=rep(2,length(unique(output_screener_q3$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q3) {trust_effect <- lmer(data = output_screener_q3,formula = biased ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q3, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("fourth quartile")
+output_screener_q4$D <- as.numeric(output_screener_q4$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q4),
+                                     blocks = output_screener_q4$ID,
+                                     block_m=rep(2,length(unique(output_screener_q4$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q4) {trust_effect <- lmer(data = output_screener_q4,formula = biased ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q4, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+```
+
+## Blocked Fisherian Randomization with Random Effects Model for trustworthy per quantile
+```{r}
+print("first quantile")
+output_screener_q1$D <- as.numeric(output_screener_q1$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q1), 
+                                     blocks = output_screener_q1$ID,
+                                     block_m=rep(2,length(unique(output_screener_q1$ID))))
+
+vec <- c("PubCNN:Pub_familiarNo:D",
+         "PubFoxNews:Pub_familiarNo:D",
+         "PubAtlantic:Pub_familiarNo:D",
+         "PubSacBee:Pub_familiarNo:D",
+         "PubCNN:Pub_familiarYes:D",
+         "PubFoxNews:Pub_familiarYes:D",
+         "PubAtlantic:Pub_familiarYes:D",
+         "PubSacBee:Pub_familiarYes:D")
+for (k in vec) {
+  test_funciton <- function(output_screener_q1) {trust_effect <- lmer(data = output_screener_q1, formula = trustworthy ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q1, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("second quartile")
+output_screener_q2$D <- as.numeric(output_screener_q2$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q2), 
+                                     blocks = output_screener_q2$ID,
+                                     block_m=rep(2,length(unique(output_screener_q2$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q2) {trust_effect <- lmer(data = output_screener_q2, formula = trustworthy ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q2, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("third quartile")
+output_screener_q3$D <- as.numeric(output_screener_q3$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q3),
+                                     blocks = output_screener_q3$ID,
+                                     block_m=rep(2,length(unique(output_screener_q3$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q3) {trust_effect <- lmer(data = output_screener_q3,formula = trustworthy ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q3, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+print("fourth quartile")
+output_screener_q4$D <- as.numeric(output_screener_q4$CRN != "c1")
+
+declaration <- randomizr::declare_ra(N = nrow(output_screener_q4),
+                                     blocks = output_screener_q4$ID,
+                                     block_m=rep(2,length(unique(output_screener_q4$ID))))
+
+for (k in vec) {
+  test_funciton <- function(output_screener_q4) {trust_effect <- lmer(data = output_screener_q4,formula = trustworthy ~ (1|ID) + Pub + Pub_familiar + Pub:Pub_familiar + Pub:(D:Pub_familiar + Mixed_vs_Pol + pol_leaning))
+  coef1 <- summary(trust_effect)$coefficients[k,1]
+  names(coef1) <- NULL
+  return(coef1)}
+  
+  out <-
+    conduct_ri(
+      test_function = test_funciton,
+      declaration = declaration,
+      assignment = "D",
+      sharp_hypothesis = 0,
+      data = output_screener_q4, sims = 100
+    )
+  print(summary(out))
+  print(plot(out))
+  tidy(out)
+}
+```
