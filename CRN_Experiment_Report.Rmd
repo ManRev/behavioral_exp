@@ -1,0 +1,1075 @@
+---
+title: "CRN Behavioral Experiment - Report"
+author: "Amir Tohidi Kalorazi"
+date: "3/28/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+library(tidyverse)
+library(reshape2)
+library(lme4)
+library(corrplot)
+library(jtools)
+library(dotwhisker)
+library(broom)
+library(knitr)
+library(ggfortify)
+library(nlme)
+library(simr)
+library(pscl)
+library(foreign)
+library("gdata")
+library('ri2')
+#library(lmerTest)
+```
+
+## Loading and Forming dataframes
+We are only including those who agreed to participate and finished the survey
+
+```{r, echo=FALSE}
+crn_experiment_data <- read.csv("Data/final_data.csv") %>%
+  filter(Finished != "False" & Q1 == "I agree to participate")
+```
+
+#### Functions
+
+```{r}
+REM <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_pol_knowledge <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:pol_knowledge + 
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_PCA <- function(principal_comp){
+pca_sigma <- as.data.frame(t(apply(principal_comp %>% filter(CRN == "c1") %>%
+              select(PC1, PC2), 2, sd)))
+pc1_effect <- lmer(data = principal_comp, 
+                   formula = PC1/pca_sigma$PC1 ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning)) %>% 
+  tidy() %>% filter(str_detect(term, "CRN_vs_NoCRN")) %>% mutate(model = "-PC1")
+
+pc2_effect <- lmer(data = principal_comp, 
+                   formula = PC2/pca_sigma$PC2 ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning)) %>% 
+  tidy() %>% filter(str_detect(term, "CRN_vs_NoCRN")) %>% mutate(model = "PC2")
+pc_effect <- rbind(pc1_effect, pc2_effect)
+return(pc_effect)
+}
+
+REM_treatment <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:(treatment:Pub_familiar + pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "treatment")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub +
+                      Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_total <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ Pub + CRN_vs_NoCRN +
+                      Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+trust_effect_df <- tidy(trust_effect) %>% 
+  filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "trust") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ Pub + CRN_vs_NoCRN + Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+false_effect_df <- tidy(false_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "false") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+credible_effect <- lmer(data = output_measures, 
+                       formula = credible/sigma$credible ~ Pub + CRN_vs_NoCRN +
+                         Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+credible_effect_df <- tidy(credible_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "credible") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+biased_effect <- lmer(data = output_measures, 
+                     formula = biased/sigma$biased ~ Pub + CRN_vs_NoCRN + 
+                       Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+biased_effect_df <- tidy(biased_effect) %>% 
+   filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "biased") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+informative_effect <- lmer(data = output_measures, 
+                          formula = informative/sigma$informative ~ Pub + 
+                            CRN_vs_NoCRN + Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+informative_effect_df <- tidy(informative_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "informative") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+}
+```
+
+
+#### Extracting columns corresponding to different output measures
+
+```{r, echo=FALSE}
+crn_trustworthy <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_1")) %>% rowid_to_column(var = "ID")
+crn_false <- select(crn_experiment_data, starts_with("p")) %>% 
+  select(ends_with("_2")) %>% rowid_to_column(var = "ID")
+crn_credible <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_3")) %>% rowid_to_column(var = "ID")
+crn_biased <- select(crn_experiment_data, starts_with("p")) %>% 
+  select(ends_with("_4")) %>% rowid_to_column(var = "ID")
+crn_informative <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_5")) %>% rowid_to_column(var = "ID")
+kable(head(crn_trustworthy, n = 10))
+```
+
+#### Forming dataframes where there are four rows for each user and one column for their answer in each CRN condition
+
+```{r, echo=FALSE}
+trustworthy_cf <- crn_trustworthy %>% 
+  gather(key = "P_C", -"ID", value = "value") %>%
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+false_cf <- crn_false %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+credible_cf <- crn_credible %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+biased_cf <- crn_biased %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+informative_cf <- crn_informative %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>%
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+kable(head(trustworthy_cf, n = 10))
+```
+
+#### Putting all different measures in one dataframe(output_measures), where the CRN condition is specified in a separate column itself. So we have a dataframe in which there are four rows for each user and you can see that user's answer to 5 different credibility questions for a publisher(Pub) and treatment condition(CRN).
+
+```{r, echo=FALSE}
+trustworthy_dummy <- trustworthy_cf %>% 
+  gather("CRN", value = "trustworthy", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+false_dummy <- false_cf %>% 
+  gather("CRN", value = "false", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+credible_dummy <- credible_cf %>% 
+  gather("CRN", value = "credible", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+biased_dummy <- biased_cf %>% 
+  gather("CRN", value = "biased", c1:c3) %>%
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3))
+
+informative_dummy <- informative_cf %>% 
+  gather("CRN", value = "informative", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+output_measures <- Reduce(function(x, y) merge(x, y, by = c("ID", "Pub", "CRN")), 
+                          list(informative_dummy, biased_dummy, credible_dummy, 
+                               false_dummy, trustworthy_dummy)) %>% arrange(-desc(ID))
+levels(output_measures$Pub) <- c("CNN", "FoxNews", "Atlantic", "SacBee")     
+
+# Extracting useful covariates 
+covariates <- crn_experiment_data %>% 
+  select(Q32, Q845_12:Q845_15, Q384_12:Q384_15, Q849_12:Q849_15) %>% 
+  rowid_to_column(var = "ID") %>% 
+  rename(pol_leaning = Q32, familiar_Fox = Q845_12, familiar_Atlantic = Q845_13,
+         familiar_CNN = Q845_14, familiar_SacBee = Q845_15, truthful_Fox = Q384_12,
+         truthful_Atlantic = Q384_13, truthful_CNN = Q384_14, 
+         truthful_SacBee = Q384_15, trust_Fox = Q849_12, trust_Atlantic = Q849_13,
+         trust_CNN = Q849_14, trust_SacBee = Q849_15) %>%
+  mutate_at(funs(factor), .vars = -1) %>% mutate(Pub_familiar = NA)
+
+output_measures <- merge(output_measures, covariates, by = "ID")
+
+output_measures$Pub_familiar[output_measures$Pub == "CNN"] <- output_measures$familiar_CNN[output_measures$Pub == "CNN"]
+output_measures$Pub_familiar[output_measures$Pub == "FoxNews"] <- output_measures$familiar_Fox[output_measures$Pub == "FoxNews"]
+output_measures$Pub_familiar[output_measures$Pub == "Atlantic"] <- output_measures$familiar_Atlantic[output_measures$Pub == "Atlantic"]
+output_measures$Pub_familiar[output_measures$Pub == "SacBee"] <- output_measures$familiar_SacBee[output_measures$Pub == "SacBee"]
+output_measures$Pub_familiar <- as.factor(output_measures$Pub_familiar)
+levels(output_measures$Pub_familiar) <- c("No", "No", "Yes")
+output_measures <- output_measures %>% 
+  mutate(CRN_vs_NoCRN = 1/3*as.numeric(CRN == "c2") + 1/3*as.numeric(CRN == "c3") -
+           2/3 * as.numeric(CRN == "c1"),
+         Mixed_vs_Pol = 1/2*as.numeric(CRN == "c3") - 1/2*as.numeric(CRN == "c2"))
+output_measures$treatment <- as.numeric(output_measures$CRN != "c1")
+# Political Knwoledge
+political_knowledge <- crn_experiment_data %>% rowid_to_column(var = "ID") %>% select(ID, Q42, Q44, Q46, Q48, Q50) %>%
+  mutate(pol_knowledge = as.factor(ifelse((ifelse(Q42 == "The Supreme Court", 1, 0) + 
+           ifelse(Q44 == "The President", 1, 0) + 
+           ifelse(Q46 == "Theresa May", 1, 0) + 
+           ifelse(Q48 == "Speaker of the House", 1, 0) +
+           ifelse(Q50 == "Treasury Secretary", 1, 0)) >= 3, "high", "low"))) %>% select(ID, pol_knowledge)
+output_measures<- merge(output_measures, political_knowledge, by = "ID")
+kable(head(output_measures, n = 10))
+```
+
+## Some insighful plots
+
+#### Plotting Dot product and Rank Correlation for credibility measures
+
+```{r, echo=FALSE}
+correlation <- cor(select(output_measures, trustworthy:informative))
+rank_correlation <- cor(select(output_measures, trustworthy:informative), 
+                        method = "spearman")
+corrplot(correlation, type="upper", method = "number", 
+         title = "dot product correlation")
+corrplot(rank_correlation, type="upper", method = "number")
+```
+
+#### Histogram of responses under different conditions
+
+```{r, echo=FALSE}
+output_measures %>% gather ("question", "answer", trustworthy:informative) %>% 
+  ggplot(aes(x = answer, fill = Pub)) + 
+  geom_bar() + 
+  facet_grid(question ~ CRN) 
+```
+
+#### Histogram of political leaning
+
+```{r}
+output_measures %>% group_by(ID) %>% 
+  summarise(pol_leaning = unique(pol_leaning)) %>% filter(pol_leaning != "") %>%
+  ggplot(aes(x = pol_leaning)) + geom_bar()
+```
+
+
+#### Mean response to different questions for each publisher
+
+```{r, echo=FALSE}
+output_measures %>% gather ("question", "answer", trustworthy:informative) %>% 
+  group_by(Pub, question, Pub_familiar) %>% 
+  summarise(mean_response = mean(answer)) %>% ungroup() %>% 
+  ggplot(aes(x = Pub, y = mean_response)) +
+  geom_col() + facet_wrap(Pub_familiar ~  question, nrow = 2) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("mean_response.pdf", height = 5, width = 7)
+```
+
+#### Histogram of CRN conditions for each publisher
+
+```{r}
+output_measures %>% ggplot(aes(x = CRN, fill = Pub_familiar)) + 
+  geom_bar() + 
+  facet_wrap(~ Pub, nrow = 1)
+```
+
+#### Familiarity with different Publishers
+
+```{r}
+output_measures %>% 
+  select(familiar_Fox, familiar_CNN, familiar_SacBee, familiar_Atlantic) %>%
+  apply(2, table) / nrow(output_measures) * 100
+```
+
+#### Linear Regression on different Publishers 
+
+Here we are measuring the treatment effect of mixed and political CRNs vs. no CRN.
+
+```{r, echo=FALSE}
+Pub_trust_effect <- output_measures %>% group_by(Pub) %>% 
+  do(tidy(lm(formula = trustworthy ~ treatment + pol_leaning +
+                    Pub_familiar , data = .))) %>% 
+  rename(submodel = Pub) %>% mutate(model = "trust") %>% ungroup()
+
+Pub_false_effect <- output_measures %>% group_by(Pub) %>% 
+  do(tidy(lm(formula = false ~ treatment + pol_leaning +
+                    Pub_familiar, data = .))) %>% 
+  rename(submodel = Pub) %>% mutate(model = "false") %>% ungroup()
+
+Pub_credible_effect <- output_measures %>% group_by(Pub) %>% 
+  do(tidy(lm(formula = credible ~ treatment + pol_leaning +
+                    Pub_familiar, data = .))) %>% 
+  rename(submodel = Pub) %>% mutate(model = "credible") %>% ungroup()
+
+Pub_informative_effect <- output_measures %>% group_by(Pub) %>% 
+  do(tidy(lm(formula = informative ~ treatment + pol_leaning +
+                    Pub_familiar, data = .))) %>% 
+  rename(submodel = Pub) %>% mutate(model = "informative") %>% ungroup()
+
+Pub_biased_effect <- output_measures %>% group_by(Pub) %>% 
+  do(tidy(lm(formula = biased ~ treatment + pol_leaning +
+               Pub_familiar, data = .))) %>% 
+  rename(submodel = Pub) %>% mutate(model = "biased") %>% ungroup()
+
+pub_effect_df <- rbind(Pub_false_effect, Pub_trust_effect, Pub_biased_effect,
+                       Pub_credible_effect, Pub_informative_effect) %>% 
+                  filter(str_detect(term, "treatment")) 
+small_multiple(pub_effect_df, dodge_size = 0.7) + coord_flip() + 
+  geom_hline(yintercept = 0, colour = "grey60", linetype = 2) 
+ggsave("Publisher_OLS.pdf")
+```
+
+#### Contrast Encoding
+
+Here we measure the contrast effect of any type of CRN vs. no CRN, and political vs. mixed ones.
+
+```{r}
+effects_df <- REM_total(output_measures)
+dwplot(effects_df) + xlab("Average treatment effect (standard deviation)")
+ggsave("total.pdf")
+```
+
+#### Contrast Encoding: Including publisher interaction term in REM and normalizing treatment effects by the standard deviation in the control group
+
+```{r}
+effects_df <- REM(output_measures)
+dwplot(effects_df %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+ggsave("heterogenuous_effects.pdf")
+dwplot(effects_df %>% filter(str_detect(term, "Mixed_vs_Pol")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+ggsave("image2.pdf")
+```
+
+#### The effect of interaction of Publisher total popularity with user's familiarity
+
+```{r}
+sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+trust_effect <- output_measures %>% mutate(fam_rate = ifelse(Pub %in% c("CNN", "FoxNews"), "High", "Low")) %>%
+                lmer(formula = trustworthy/sigma$trustworthy ~ (1|ID) + fam_rate + pol_knowledge +
+                      Pub_familiar + fam_rate:Pub_familiar + fam_rate:pol_leaning +
+                      fam_rate:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol:Pub_familiar))
+tidy(trust_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") | str_detect(term, "Mixed_vs_Pol")) %>% 
+  dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+```
+
+
+### Filtering users with no correct CRT response
+
+```{r}
+CRT_questions <- crn_experiment_data %>% 
+  select("Q52_1", "Q54_1", "Q56_1") %>% rowid_to_column(var = "ID") %>%
+  mutate(total = as.numeric(Q52_1 == 0.05 | Q52_1 == 5) +
+           as.numeric(Q54_1 == 5) + as.numeric(Q56_1 == 47))
+at_least_one_CRT <- CRT_questions %>%  filter(total >= 1)
+no_CRT <- CRT_questions %>% filter(total == 0)
+CRT_questions %>% ggplot(aes(x = total)) + geom_bar() + 
+  ggtitle("Histogram of the number of correct responses to CRT question")
+
+```
+
+#### Repeating random effects model analysis for users with at least one correct response to CRT questions
+
+```{r}
+output_measures_CRT_right <- output_measures %>% filter(ID %in% at_least_one_CRT$ID)
+effects_df <- REM(output_measures_CRT_right)
+dwplot(effects_df, dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)") + ggtitle("Treatment effect for correct CRT responders")
+```
+
+#### Repeating random effects model analysis for users with no correct response to CRT questions
+
+```{r}
+output_measures_CRT_wrong <- output_measures %>% filter(ID %in% no_CRT$ID)
+effects_df <- REM(output_measures_CRT_wrong)
+dwplot(effects_df, dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+```
+
+#### Changes in the effect with CRT responses
+
+```{r}
+CRT_low <- REM(output_measures_CRT_wrong)
+CRT_low$CRT <- "low"
+CRT_high <- REM(output_measures_CRT_right)
+CRT_high$CRT <- "high"
+effects_df <- rbind(CRT_high, CRT_low)
+effects_df %>% filter(model == "credible", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 4)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 2)) %>% 
+  mutate_at(funs(factor), .vars = 9) %>%
+  ggplot(aes(x = CRT, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("Cognitive Reflection") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Credibility") +
+  geom_errorbar(mapping = aes(x = CRT, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 0.3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("CRT_credible.pdf")
+
+effects_df %>% filter(model == "trust", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 4)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 2)) %>% 
+  mutate_at(funs(factor), .vars = 9) %>%
+  ggplot(aes(x = CRT, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("Cognitive Reflection") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Trust") +
+  geom_errorbar(mapping = aes(x = CRT, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 0.3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("CRT_trust.pdf")
+
+effects_df %>% filter(model == "biased", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 4)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 2)) %>% 
+  mutate_at(funs(factor), .vars = 9) %>%
+  ggplot(aes(x = CRT, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("Cognitive Reflection") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Bias") +
+  geom_errorbar(mapping = aes(x = CRT, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 0.3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("CRT_biased.pdf")
+
+effects_df %>% filter(model == "informative", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 4)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 2)) %>% 
+  mutate_at(funs(factor), .vars = 9) %>%
+  ggplot(aes(x = CRT, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("Cognitive Reflection") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Informative") +
+  geom_errorbar(mapping = aes(x = CRT, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 0.3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("CRT_infomative.pdf")
+
+effects_df %>% filter(model == "false", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 4)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 2)) %>% 
+  mutate_at(funs(factor), .vars = 9) %>%
+  ggplot(aes(x = CRT, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("Cognitive Reflection") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("False Information") +
+  geom_errorbar(mapping = aes(x = CRT, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 0.3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("CRT_false.pdf")
+```
+
+
+### Fiding latent attentiveness using screener questions
+
+```{r}
+screeners <- crn_experiment_data %>% rowid_to_column(var = "ID") %>% 
+  select(ID, Q773, Q797, Q1_1, Q1_6, Q2_1, Q2_6) %>% 
+  mutate(total_correct = as.numeric(Q773 == "Red,Green") + 
+           as.numeric(Q797 == "The Drudge Report,ABC News website") + 
+           as.numeric(Q1_1 == "Disagree strongly" | Q1_1 == "Disagree") +
+           as.numeric(Q1_6 == 3) + 
+           as.numeric(Q2_1 == "Disagree strongly" | Q2_1 == "Disagree") + 
+           as.numeric(Q2_6 == "Agree strongly" | Q2_6 == "Agree")) 
+
+
+
+screeners %>% ggplot(aes(x = total_correct)) + geom_bar() + ggtitle("Histogram of number of correct responses to screeners")
+
+screeners$Q773 <- as.numeric(screeners$Q773 == "Red,Green")
+screeners$Q797 <- as.numeric(screeners$Q797 == "The Drudge Report,ABC News website")
+screeners$Q1_1 <- as.numeric(screeners$Q1_1 == "Disagree strongly" |
+                             screeners$Q1_1 == "Disagree")
+screeners$Q1_6 <- as.numeric(screeners$Q1_6 == 3)
+screeners$Q2_1 <- as.numeric(screeners$Q2_1 == "Disagree strongly" | 
+                               screeners$Q2_1 == "Disagree")
+screeners$Q2_6 <- as.numeric(screeners$Q2_6 == "Agree strongly" |
+                               screeners$Q2_6 == "Agree")
+
+colnames(screeners) <- c("ID", "scr_web", "scr_color", "scr_grid_ww2",
+                         "scr_grid_middle", "scr_grid_obama",
+                         "scr_grid_number", "total_correct")
+
+#saveRDS(screeners, "Screener.RDS")
+
+
+data2 <- select(screeners, -ID, -total_correct)
+data2 <- rollcall(data2,
+                  yea=1, nay=0, missing=c(NA), notInLegis=9,
+                  legis.names=NULL, vote.names=NULL,
+                  legis.data=NULL, vote.data=NULL,
+                  desc=NULL, source=NULL)
+model_screeners_mixed <- ideal(data2, store.item=T)
+screeners$attention <- model_screeners_mixed$xbar
+hist(screeners$attention)
+cor(screeners$attention, screeners$total_correct)
+
+ggplot(screeners, aes(x = total_correct, y = attention)) + geom_point() +
+  geom_smooth(method = "lm")
+
+screener_q1 <- screeners %>% 
+  dplyr::filter(attention <= quantile(screeners$attention, 0.25))
+screener_q2 <- screeners %>%
+  dplyr::filter(attention <= quantile(screeners$attention, 0.5) & 
+                  attention > quantile(screeners$attention, 0.25))
+screener_q3 <- screeners %>% 
+  dplyr::filter(attention <= quantile(screeners$attention, 0.75) &
+                attention > quantile(screeners$attention, 0.5))
+screener_q4 <- screeners %>% 
+  dplyr::filter(attention > quantile(screeners$attention, 0.75))
+```
+
+#### Repeating random effects model analysis for different quantiles of attention
+
+```{r}
+output_screener_q1 <- output_measures %>% 
+  filter(ID %in% screener_q1$ID)
+effects_df_q1 <- REM(output_screener_q1)
+dwplot(effects_df_q1 %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+effects_df_q1$quantile <- 25
+
+output_screener_q2 <- output_measures %>% 
+  filter(ID %in% screener_q2$ID)
+effects_df_q2 <- REM(output_screener_q2)
+dwplot(effects_df_q2 %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+effects_df_q2$quantile <- 50
+
+output_screener_q3 <- output_measures %>% 
+  filter(ID %in% screener_q3$ID)
+effects_df_q3 <- REM(output_screener_q3)
+dwplot(effects_df_q3 %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+effects_df_q3$quantile <- 75
+
+output_screener_q4 <- output_measures %>% 
+  filter(ID %in% screener_q4$ID)
+effects_df_q4 <- REM(output_screener_q4)
+dwplot(effects_df_q4 %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+effects_df_q4$quantile <- 100
+
+effects_df <- rbind(effects_df_q1, effects_df_q2, effects_df_q3, effects_df_q4)
+
+effects_df %>% filter(model == "credible", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 8)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 4)) %>%
+  ggplot(aes(x = quantile, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("quantils of attentiveness") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Credibility") +
+  geom_line(linetype = 2) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100)) + 
+  geom_errorbar(mapping = aes(x = quantile, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 3) + 
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("screener_credible.pdf")
+
+effects_df %>% filter(model == "trust", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 8)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 4)) %>%
+  ggplot(aes(x = quantile, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("quantils of attentiveness") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Trust") +
+  geom_line(linetype = 2)  + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100)) + 
+  geom_errorbar(mapping = aes(x = quantile, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 3) +
+    geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("screener_trust.pdf")
+
+effects_df %>% filter(model == "false", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 8)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 4)) %>%
+  ggplot(aes(x = quantile, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("quantils of attentiveness") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("False Information") +
+  geom_line(linetype = 2) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100)) + 
+  geom_errorbar(mapping = aes(x = quantile, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 3) +  
+  geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("screener_false.pdf")
+
+effects_df %>% filter(model == "biased", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 8)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 4)) %>%
+  ggplot(aes(x = quantile, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("quantils of attentiveness") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Biased") +
+  geom_line(linetype = 2) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100)) + 
+  geom_errorbar(mapping = aes(x = quantile, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 3) + 
+  geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("screener_biased.pdf")
+
+effects_df %>% filter(model == "informative", str_detect(term, "CRN_vs_NoCRN"),
+                      str_detect(term, "Pub_familiar")) %>% 
+  mutate(Pub = rep(c("CNN", "FoxNews", "Atlantic", "SacBee"), 8)) %>% 
+  mutate(familiarity = rep(rep(c("Not Familiar","Familiar"), each = 4), 4)) %>%
+  ggplot(aes(x = quantile, y = estimate)) + geom_point() + 
+  facet_wrap(familiarity ~ Pub, nrow = 2) + 
+  xlab("quantils of attentiveness") + ylab("ATE(sd) of CRN vs NoCRN") + 
+  ggtitle("Informative") +
+  geom_line(linetype = 2) + 
+  scale_x_continuous(breaks = c(25, 50, 75, 100)) + 
+  geom_errorbar(mapping = aes(x = quantile, ymin = estimate - 1.96 * std.error, 
+                              ymax = estimate + 1.96 * std.error),
+                alpha = 0.8, width = 3) + 
+  geom_hline(yintercept = 0, color = "red", alpha = 0.5)
+
+ggsave("screener_informative.pdf")
+```
+
+## PCA analysis
+
+#### PCA for everyone
+
+```{r}
+output_pca <- select(output_measures, informative, false, credible, trustworthy, biased) %>%
+  mutate_at(.vars = c("false", "biased"), .funs = function(x) 1*x) %>% prcomp(center = TRUE, scale. = TRUE)
+summary(output_pca)
+
+autoplot(output_pca, data = output_measures, colour = "CRN", loadings = TRUE,
+         loadings.label = TRUE)
+
+# Estimating random effects model for first two principal components
+principal_comp <- output_measures %>% select(ID, Pub, CRN, CRN_vs_NoCRN, Mixed_vs_Pol, pol_leaning, Pub_familiar, pol_knowledge) %>%
+  mutate(PC1 = -output_pca$x[,1], PC2 = output_pca$x[,2])
+pc_effect <- REM_PCA(principal_comp)
+
+dwplot(pc_effect)
+```
+
+#### PCA for correct CRT responses
+
+```{r}
+output_pca <- prcomp(select(output_measures_CRT_right, informative:trustworthy), 
+                     center = TRUE, scale. = TRUE)
+summary(output_pca)
+autoplot(output_pca, data = output_measures_CRT_right, colour = "CRN", loadings = TRUE,
+         loadings.label = TRUE)
+principal_comp <- output_measures_CRT_right %>% select(ID, Pub, CRN, pol_leaning) %>%
+  mutate(PC1 = output_pca$x[,1], PC2 = output_pca$x[,2])
+pc1_effect <- lmer(data = principal_comp, 
+                   formula = PC1 ~ CRN + pol_leaning + (1|ID)) %>% 
+  tidy() %>% filter(term == "CRNc2" | term == "CRNc3") %>% mutate(model = "PC1")
+pc2_effect <- lmer(data = principal_comp, 
+                   formula = PC2 ~ CRN + pol_leaning + (1|ID)) %>% 
+  tidy() %>% filter(term == "CRNc2" | term == "CRNc3") %>% mutate(model = "PC2")
+pc_effect <- rbind(pc1_effect, pc2_effect)
+dwplot(pc_effect)
+```
+
+## Power Analysis
+
+```{r}
+data <- filter(output_measures, ID < 51)
+sigma <- as.data.frame(t(apply(data %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+trust_effect <- lmer(data = output_measures,
+                    formula = trustworthy ~ (1|ID) + Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:(treatment:Pub_familiar + pol_leaning))
+
+summary(trust_effect)
+fixef(trust_effect)["PubSacBee:Pub_familiarNo:treatment"] <- 0.096051 / 2
+fixef(trust_effect)["PubAtlantic:Pub_familiarYes:treatment"] <- -0.119806 / 2
+power_trust <- powerSim(trust_effect, nsim = 50,
+              test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:pol_leaning))
+power_trust
+
+
+
+power_trust_extend1 <- powerSim(trust_effect_extend, nsim = 50,
+              test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + Pub:pol_leaning))
+power_trust_extend1
+
+trust_effect_extend2 <- extend(trust_effect, within = "ID+treatment", n = 2)
+trust_effect_extend2 <- extend(trust_effect_extend, along = "ID", n = 12000)
+trust_effect_extend3 <- extend(trust_effect, within = "ID+treatment", n = 3)
+trust_effect_extend3 <- extend(trust_effect_extend3, along = "ID", n = 12000)
+trust_effect_extend4 <- extend(trust_effect, within = "ID+treatment", n = 4)
+trust_effect_extend4 <- extend(trust_effect_extend4, along = "ID", n = 12000)
+trust_effect_extend5 <- extend(trust_effect, within = "ID+treatment", n = 5)
+trust_effect_extend5 <- extend(trust_effect_extend5, along = "ID", n = 12000)
+
+
+power_trust_curve <- powerCurve(trust_effect_extend, along = "ID", nsim = 100, 
+             test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:pol_leaning), 
+             breaks = c(2000, 4000, 5000, 6000, 7000, 8000, 10000, 12000))
+power_trust_curve3 <- powerCurve(trust_effect_extend3, along = "ID", nsim = 100, 
+             test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:pol_leaning), 
+             breaks = c(2000, 4000, 5000, 6000, 7000, 8000, 10000, 12000))
+power_trust_curve4 <- powerCurve(trust_effect_extend4, along = "ID", nsim = 100, 
+             test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:pol_leaning), 
+             breaks = c(1000, 2000, 4000, 5000, 6000, 8000))
+power_trust_curve5 <- powerCurve(trust_effect_extend5, along = "ID", nsim = 100, 
+             test = fcompare(trustworthy ~ Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:pol_leaning), 
+             breaks = c(1000, 2000, 4000, 5000, 6000, 8000))
+
+curve5 <- summary(power_trust_curve5) %>% mutate(n = "10")
+curve2 <- summary(power_trust_curve) %>% mutate(n = "4")
+curve3 <- summary(power_trust_curve3) %>% mutate(n = "6")
+curve4 <- summary(power_trust_curve4) %>% mutate(n = "8")
+power_curves <- rbind(curve2, curve3, curve4, curve5)
+power_curves %>% arrange(desc(as.numeric(n))) %>%
+  ggplot(aes(x = nlevels, y = mean)) + 
+  geom_line(aes(color = n), linetype = 2) + geom_point(aes(color = n)) + 
+  geom_errorbar(aes(x = nlevels, ymin = lower, ymax = upper, color = n), 
+                alpha = 0.8, width = 2) + geom_hline(yintercept = 0.8) + 
+  scale_x_continuous(name="Sample Size", breaks = seq(1000,12000, 1000) ) +
+  scale_y_continuous(name = "Power", breaks = seq(0.1,1,0.1))
+```
+
+## Media Survey
+
+```{r}
+media_survey <- read.csv("Data/media_survey.csv", stringsAsFactors = F)
+media_familiarity <- select(media_survey, Q172_1:Q172_20) %>% filter(row_number() > 2)
+colnames(media_familiarity) <- c("Sacramento Bee", "The Atlantic", "Fox News", "CNN", "NBC", 
+                                 "Washington Post", "USA Today", "San Francisco Chronicle", 
+                                 "Vox", "New York Post", "Boston Globe", "Wall Street Journal", 
+                                 "Los Angeles Times", "Denver Post", "Dallas Morning News", 
+                                 "Baltimore Sun", "Twin Cities Pioneer Press", "FiveThirtyEight", 
+                                 "The Hartford Courant", "Daytona Beach News-Journal")
+media_familiarity %>% gather(key = "Source", value = "familiarity") %>% group_by(Source) %>%
+  summarise(prop = sum(familiarity == "Yes")/n()) %>% 
+  arrange(desc(prop)) %>%
+  ggplot() + geom_col(mapping = aes(x = reorder(Source, -prop), y = prop)) + 
+  scale_y_continuous(labels = scales::percent_format()) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("") + ggtitle("Familiarity rate")
+ 
+media_trust <- select(media_survey, Q173_1:Q173_20, Q4.31) %>% filter(row_number() > 2) 
+colnames(media_trust) <- c("Sacramento Bee", "The Atlantic", "Fox News", "CNN", "NBC", 
+                                 "Washington Post", "USA Today", "San Francisco Chronicle", 
+                                 "Vox", "New York Post", "Boston Globe", "Wall Street Journal", 
+                                 "Los Angeles Times", "Denver Post", "Dallas Morning News", 
+                                 "Baltimore Sun", "Twin Cities Pioneer Press", "FiveThirtyEight", 
+                                 "The Hartford Courant", "Daytona Beach News-Journal","Political_party")
+media_trust <- media_trust[!apply(media_trust, 1, function(x) any(x=="")),] 
+media_trust <- media_trust %>% gather(key = "Source", value = "trust", -Political_party)
+media_trust$trust <- factor(media_trust$trust, 
+                            levels = c("Not at all","Barely","Somewhat", "A Lot", "Entirely"))
+media_trust$Political_party <- factor(media_trust$Political_party, 
+                                 levels = c("Democrat", "Republican", "Independent", "Other Party"))
+data <- media_trust %>% group_by(Political_party, Source) %>% summarise(total = n()) 
+media_trust <- merge(media_trust, data, by = c("Political_party", "Source"))
+media_trust %>% group_by(Source, Political_party, trust, total) %>% summarise(count = n()) %>%
+  ungroup() %>% mutate(perc = count / total) %>%
+  ggplot(aes(x = Political_party, y = perc)) + 
+  geom_bar(aes(fill = trust), stat="identity") + facet_wrap(~ Source) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  scale_y_continuous(labels = scales::percent_format()) + 
+  xlab("") + ggtitle("Trust rate") + 
+  scale_fill_discrete(breaks=c("Not at all","Barely","Somewhat", "A Lot", "Entirely"))
+```
+
+## Looking at Participants' Political Knowledge
+
+```{r}
+political_knowledge <- crn_experiment_data %>% rowid_to_column(var = "ID") %>% select(ID, Q42, Q44, Q46, Q48, Q50) %>%
+  mutate(total_pol_knowledge = ifelse(Q42 == "The Supreme Court", 1, 0) + 
+           ifelse(Q44 == "The President", 1, 0) + 
+           ifelse(Q46 == "Theresa May", 1, 0) + 
+           ifelse(Q48 == "Speaker of the House", 1, 0) +
+           ifelse(Q50 == "Treasury Secretary", 1, 0))
+political_knowledge %>% ggplot(aes(x = total_pol_knowledge)) + geom_bar() + 
+  ggtitle("distribution of correct responses to political questions")
+
+effects_df <- REM_pol_knowledge(output_measures)
+dwplot(effects_df %>% filter(str_detect(term, "CRN_vs_NoCRN")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+dwplot(effects_df %>% filter(str_detect(term, "Mixed_vs_Pol")), dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+```
+
+## Preregistration of second experiment with simulated data
+
+```{r}
+N <- 5000
+Publishers <- c("CNN", "FoxNews", "Atlantic", "USA_Today", "Daytona_Beach", "Vox", "SacBee", "Denver_Post")
+articles <- c("CNN", "FoxNews", "Atlantic", "USA_Today", "Daytona_Beach", "Vox", "SacBee", "Denver_Post")
+ads <- c("NA", "NA", "Lq_Pol","Lq_nPol", "Hq_Pol", "Hq_nPol")
+
+media_survey <- read.csv("Data/media_survey.csv", stringsAsFactors = F)
+media_familiarity <- select(media_survey, Q172_1:Q172_20, Q4.31, Q5.3, Q5.5, Q5.7, Q5.9, Q5.11) %>% 
+  filter(row_number() > 2) %>% rowid_to_column(var = "ID") %>% 
+  mutate(total_pol_knowledge = ifelse(Q5.3 == "The Supreme Court", 1, 0) + 
+           ifelse(Q5.5 == "The President", 1, 0) + 
+           ifelse(Q5.7 == "Boris Johnson", 1, 0) + 
+           ifelse(Q5.9 == "Speaker of the House", 1, 0) +
+           ifelse(Q5.11 == "Treasury Secretary", 1, 0)) %>% select(-Q5.3, -Q5.5, -Q5.7, -Q5.9, -Q5.11)
+colnames(media_familiarity) <- c("ID","SacBee", "Atlantic", "FoxNews", "CNN", "NBC", 
+                                 "Washington Post", "USA_Today", "San Francisco Chronicle", 
+                                 "Vox", "New York Post", "Boston Globe", "Wall Street Journal", 
+                                 "Los Angeles Times", "Denver_Post", "Dallas Morning News", 
+                                 "Baltimore Sun", "Twin Cities Pioneer Press", "FiveThirtyEight", 
+                                 "The Hartford Courant", "Daytona_Beach", "pol_leaning","total_pol_knowledge")
+
+Users <- media_familiarity %>% select(one_of(c(Publishers, "pol_leaning", "total_pol_knowledge"))) %>%
+  mutate_if(is_character, funs(na_if(.,""))) %>% sample_n(size = N, replace = TRUE) %>% rowid_to_column(var = "ID")
+
+treatment <- data.frame()
+for (i in 1:N) {
+  random_treatment <- cbind(rep(i, 6), sample(Publishers, 6), sample(articles, 6), sample(ads,6))
+  treatment <- rbind(treatment, random_treatment)
+}
+colnames(treatment) <- c("ID", "Publisher", "Article", "CRN")
+treatment$ID <- as.numeric(treatment$ID)
+
+sim_data <- inner_join(treatment, Users, by = "ID") 
+familiarity <- sim_data %>% select(ID, Publisher, CNN:Denver_Post) %>% 
+  gather(key = "Source", value = "familiarity", ... = -c(Publisher,ID)) %>%
+  filter(Publisher == Source) %>% arrange(ID) %>% select(ID, Publisher, familiarity)
+
+sim_data <- familiarity %>% inner_join(sim_data) %>% select(-c(CNN:Denver_Post))
+sim_data$CRN <- factor(sim_data$CRN, levels(sim_data$CRN)[c(5,1:4)])
+sim_data <- sim_data %>% mutate(random_output = sample(1:5, N*6, replace = TRUE)) %>% 
+  mutate_at(funs(factor), .vars = c(3,6)) 
+```
+
+## Hypothesis 1: 
+### Low Quality Ads lower trust in low familiarity publishers among audience who are familiar with the source
+### High quality ads increase trust in low familiarity publishers among unfamiliar audience
+
+```{r}
+sim_data1 <- sim_data %>% mutate(fam_rate = ifelse(Publisher %in% c("CNN", "FoxNews", "USA_Today"), "High", 
+                                ifelse(Publisher %in% c("Atlantic", "Denver_Post"), "Medium", "Low"))) %>%
+  mutate_at(.funs = factor, .vars = "fam_rate") %>% 
+  mutate(CRN_quality = ifelse(CRN %in% c("Lq_Pol", "Lq_nPol"), "Lq", 
+                              ifelse(CRN %in% c("Hq_Pol", "Hq_nPol"), "Hq", "NA"))) %>%
+  mutate_at(.funs = factor, .vars = "CRN_quality") %>%
+  mutate(random_output = rnorm(n = n(), mean = 0, sd = 1) + 
+           ifelse(CRN_quality == "Lq" & fam_rate == "Low" & familiarity == "Yes", 1.5, 
+                  ifelse(CRN_quality == "Hq" & fam_rate == "Low" & familiarity == "No", 4, 3))) %>%
+  mutate(CRN_vs_NA = 1/3*as.numeric(CRN_quality == "Lq") + 1/3*as.numeric(CRN_quality == "Hq") -
+           2/3 * as.numeric(CRN_quality == "NA"),
+         Hq_vs_Lq = 1/2*as.numeric(CRN_quality == "Hq") - 1/2*as.numeric(CRN_quality == "Lq"))
+
+sim_data1$fam_rate <- factor(sim_data1$fam_rate, levels(sim_data1$fam_rate)[c(2,3,1)])
+sim_data1$CRN_quality <- factor(sim_data1$CRN_quality, levels(sim_data1$CRN_quality)[c(3,2,1)])
+
+sigma <- as.data.frame(t(apply(sim_data1 %>% filter(CRN == "NA") %>%
+              select(random_output), 2, sd)))
+model1 <- lmer(data = sim_data1, formula = random_output/sigma$random_output ~ (1|ID) + (Publisher + total_pol_knowledge +
+                                                            familiarity  + pol_leaning + Article) + fam_rate:familiarity + 
+                                                            CRN_quality:fam_rate:familiarity)
+tidy(model1) %>% filter(str_detect(term, "CRN")) %>%
+    dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+
+model2 <- lmer(sim_data1, formula = random_output/sigma$random_output ~ (1|ID) + (Publisher + total_pol_knowledge +
+                                                            familiarity  + pol_leaning + Article) + fam_rate:familiarity + 
+                                                            CRN_vs_NA:fam_rate:familiarity + Hq_vs_Lq:fam_rate:familiarity)
+tidy(model2) %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+    dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+
+```
+
+## Hypothesis 3: 
+### Low Quality Ads lower trust when publisher’s leaning is different from audience’s leaning
+
+```{r}
+sim_data2 <- sim_data %>% mutate(pub_leaning = ifelse(Publisher %in% c("CNN", "Atlantic", "Denver_Post", 
+                                                                       "Vox", "Sacramento Bee"), "Left", 
+                                ifelse(Publisher %in% c("Daytona_Beach", "USA_Today"), "Middle", "Right"))) %>%
+  mutate_at(.funs = factor, .vars = "pub_leaning") %>% 
+  mutate(CRN_quality = ifelse(CRN %in% c("Lq_Pol", "Lq_nPol"), "Lq", 
+                              ifelse(CRN %in% c("Hq_Pol", "Hq_nPol"), "Hq", "NA"))) %>%
+  mutate_at(.funs = factor, .vars = "CRN_quality") %>%
+  mutate(random_output = rnorm(n = n(), mean = 0, sd = 1) + 
+           ifelse(CRN_quality == "Lq" & pub_leaning == "Left" & pol_leaning == "Democrat", 2, 
+                  ifelse(CRN_quality == "Hq" & fam_rate == "Low" & familiarity == "No", 4, 3)))
+
+```
+
