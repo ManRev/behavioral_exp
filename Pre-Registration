@@ -1,0 +1,132 @@
+---
+title: "Pre-registration Analysis"
+author: "Amir"
+date: "11/24/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+library(tidyverse)
+library(reshape2)
+library(lme4)
+library(corrplot)
+library(jtools)
+library(dotwhisker)
+library(broom)
+library(knitr)
+library(ggfortify)
+library(nlme)
+```
+
+## Preregistration of second experiment with simulated data
+
+### Here you can find the code for the pre-registreation analysis. The document can be found here: https://docs.google.com/document/d/1-6WjBLdJOr0OxpM7hylGSStB9JDERAtjet82TLDMOfc/edit#
+
+
+```{r}
+N <- 5000
+Publishers <- c("CNN", "FoxNews", "Atlantic", "USA_Today", "Daytona_Beach", "Vox", "SacBee", "Denver_Post")
+articles <- c("CNN", "FoxNews", "Atlantic", "USA_Today", "Daytona_Beach", "Vox", "SacBee", "Denver_Post")
+ads <- c("NA", "NA", "Lq_Pol","Lq_nPol", "Hq_Pol", "Hq_nPol")
+
+media_survey <- read.csv("Data/media_survey.csv", stringsAsFactors = F)
+media_familiarity <- select(media_survey, Q172_1:Q172_20, Q4.31, Q5.3, Q5.5, Q5.7, Q5.9, Q5.11) %>% 
+  filter(row_number() > 2) %>% rowid_to_column(var = "ID") %>% 
+  mutate(total_pol_knowledge = ifelse(Q5.3 == "The Supreme Court", 1, 0) + 
+           ifelse(Q5.5 == "The President", 1, 0) + 
+           ifelse(Q5.7 == "Boris Johnson", 1, 0) + 
+           ifelse(Q5.9 == "Speaker of the House", 1, 0) +
+           ifelse(Q5.11 == "Treasury Secretary", 1, 0)) %>% select(-Q5.3, -Q5.5, -Q5.7, -Q5.9, -Q5.11)
+
+colnames(media_familiarity) <- c("ID","SacBee", "Atlantic", "FoxNews", "CNN", "NBC", 
+                                 "Washington Post", "USA_Today", "San Francisco Chronicle", 
+                                 "Vox", "New York Post", "Boston Globe", "Wall Street Journal", 
+                                 "Los Angeles Times", "Denver_Post", "Dallas Morning News", 
+                                 "Baltimore Sun", "Twin Cities Pioneer Press", "FiveThirtyEight", 
+                                 "The Hartford Courant", "Daytona_Beach", "pol_leaning","total_pol_knowledge")
+
+Users <- media_familiarity %>% select(one_of(c(Publishers, "pol_leaning", "total_pol_knowledge"))) %>%
+  mutate_if(is_character, funs(na_if(.,""))) %>% sample_n(size = N, replace = TRUE) %>% rowid_to_column(var = "ID")
+
+treatment <- data.frame()
+for (i in 1:N) {
+  random_treatment <- cbind(rep(i, 6), sample(Publishers, 6), sample(articles, 6), sample(ads,6))
+  treatment <- rbind(treatment, random_treatment)
+}
+colnames(treatment) <- c("ID", "Publisher", "Article", "CRN")
+treatment$ID <- as.numeric(treatment$ID)
+
+sim_data <- inner_join(treatment, Users, by = "ID") 
+familiarity <- sim_data %>% select(ID, Publisher, CNN:Denver_Post) %>% 
+  gather(key = "Source", value = "familiarity", ... = -c(Publisher,ID)) %>%
+  filter(Publisher == Source) %>% arrange(ID) %>% select(ID, Publisher, familiarity)
+
+sim_data <- familiarity %>% inner_join(sim_data) %>% select(-c(CNN:Denver_Post)) %>%
+  mutate(Batch = ifelse(Publisher %in% c("CNN", "FoxNews", "Denver_Post", "Vox"), 1, 2))
+sim_data$CRN <- factor(sim_data$CRN, levels(sim_data$CRN)[c(5,1:4)])
+sim_data <- sim_data %>% mutate(random_output = sample(1:5, N*6, replace = TRUE)) %>% 
+  mutate_at(funs(factor), .vars = c(3,6)) 
+```
+
+## Hypothesis 1: 
+###low quality ads decrease news’ credibility 
+###high quality ads increase news’ credibility  
+
+```{r}
+sim_data1 <- sim_data %>% mutate(fam_rate = ifelse(Publisher %in% c("CNN", "FoxNews", "USA_Today"), "High", 
+                                ifelse(Publisher %in% c("Atlantic", "Denver_Post"), "Medium", "Low"))) %>%
+  mutate_at(.funs = factor, .vars = "fam_rate") %>% 
+  mutate(CRN_quality = ifelse(CRN %in% c("Lq_Pol", "Lq_nPol"), "Lq", 
+                              ifelse(CRN %in% c("Hq_Pol", "Hq_nPol"), "Hq", "NA"))) %>%
+  mutate_at(.funs = factor, .vars = "CRN_quality") %>%
+  mutate(random_output = rnorm(n = n(), mean = 0, sd = 1) + 
+           ifelse(CRN_quality == "Lq" & fam_rate == "Low" & familiarity == "Yes", 1.5, 
+                  ifelse(CRN_quality == "Hq" & fam_rate == "Low" & familiarity == "No", 4, 3))) %>%
+  mutate(CRN_vs_NA = 1/3*as.numeric(CRN_quality == "Lq") + 1/3*as.numeric(CRN_quality == "Hq") -
+           2/3 * as.numeric(CRN_quality == "NA"),
+         Hq_vs_Lq = 1/2*as.numeric(CRN_quality == "Hq") - 1/2*as.numeric(CRN_quality == "Lq"))
+
+sim_data1$fam_rate <- factor(sim_data1$fam_rate, levels(sim_data1$fam_rate)[c(2,3,1)])
+sim_data1$CRN_quality <- factor(sim_data1$CRN_quality, levels(sim_data1$CRN_quality)[c(3,2,1)])
+
+sigma <- as.data.frame(t(apply(sim_data1 %>% filter(CRN == "NA") %>%
+              select(random_output), 2, sd)))
+model1 <- lmer(data = sim_data1, formula = random_output/sigma$random_output ~ (1|ID) + (Publisher + total_pol_knowledge +
+                                                            familiarity  + pol_leaning + Article) + fam_rate:familiarity + 
+                                                            CRN_quality:fam_rate:familiarity)
+tidy(model1) %>% filter(str_detect(term, "CRN")) %>%
+    dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+
+model2 <- lmer(sim_data1, formula = random_output/sigma$random_output ~ (1|ID) + (1|Publisher) + (1|Article) + 
+                                                                      (total_pol_knowledge +
+                                                                      familiarity + pol_leaning ) + fam_rate:familiarity + 
+                                                                      CRN_vs_NA:fam_rate:familiarity + Hq_vs_Lq:fam_rate:familiarity)
+tidy(model2) %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+    dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+
+```
+
+## Hypothesis 2: 
+### Low Quality Ads lower trust when publisher’s leaning is different from audience’s leaning
+
+```{r}
+sim_data2 <- sim_data %>% mutate(pub_leaning = ifelse(Publisher %in% c("CNN", "Atlantic", "Denver_Post", 
+                                                                       "Vox", "Sacramento Bee"), "Left", 
+                                ifelse(Publisher %in% c("Daytona_Beach", "USA_Today"), "Middle", "Right"))) %>%
+  mutate_at(.funs = factor, .vars = "pub_leaning") %>% 
+  mutate(CRN_quality = ifelse(CRN %in% c("Lq_Pol", "Lq_nPol"), "Lq", 
+                              ifelse(CRN %in% c("Hq_Pol", "Hq_nPol"), "Hq", "NA"))) %>%
+  mutate_at(.funs = factor, .vars = "CRN_quality") %>%
+  mutate(CRN_leaning = ifelse(CRN == "Hq_Pol" &  Batch == 1, "Left", 
+                              ifelse(CRN == "Hq_Pol" & Batch == 2, "Right", "Neutral"))) %>%
+  mutate(random_output = rnorm(n = n(), mean = 0, sd = 1) + 
+           ifelse(CRN_leaning == "Left" & pub_leaning == "Right" &  CRN_quality == "Hq", 2.3, 
+                  ifelse(CRN_quality == "Hq" & pub_leaning == "Left" & CRN_leaning == "Right", 2.5, 3)))
+
+model3 <- lmer(sim_data2, formula = random_output/sigma$random_output ~ (1|ID) + (1|Publisher) + (1|Article) + 
+                                                                      (total_pol_knowledge +
+                                                                      familiarity + pol_leaning ) + CRN_leaning:pub_leaning)
+tidy(model3) %>% filter(str_detect(term, "CRN")) %>%
+    dwplot(dodge_size = 0.6) + xlab("Average treatment effect (standard deviation)")
+```
