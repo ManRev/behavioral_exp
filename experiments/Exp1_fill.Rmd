@@ -1,0 +1,659 @@
+---
+title: "Exp2_fill_manon"
+output: html_document
+---
+
+```{r results='hide', message=FALSE, warning=FALSE}
+```
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+library(tidyverse)
+library(reshape2)
+library(lme4)
+library(corrplot)
+library(jtools)
+library(dotwhisker)
+library(broom)
+library(knitr)
+library(ggfortify)
+library(nlme)
+library(simr)
+library(pscl)
+library(foreign)
+library("gdata")
+library('ri2')
+library(eeptools)
+#library(lmerTest)
+```
+
+```{r, echo=FALSE}
+crn_experiment_data <- read.csv("/Users/Manon/Desktop/final_data.csv") %>%
+  filter(Finished != "False" & Q1 == "I agree to participate")
+```
+
+```{r results='hide', message=FALSE, warning=FALSE}
+```
+```{r}
+REM <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_pol_knowledge <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:pol_knowledge + 
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:pol_knowledge)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar + pol_knowledge +
+                      Pub:(CRN_vs_NoCRN:pol_knowledge + Mixed_vs_Pol +
+                        pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "CRN_vs_NoCRN") |  str_detect(term, "Mixed_vs_Pol")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_PCA <- function(principal_comp){
+pca_sigma <- as.data.frame(t(apply(principal_comp %>% filter(CRN == "c1") %>%
+              select(PC1, PC2), 2, sd)))
+pc1_effect <- lmer(data = principal_comp, 
+                   formula = PC1/pca_sigma$PC1 ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning)) %>% 
+  tidy() %>% filter(str_detect(term, "CRN_vs_NoCRN")) %>% mutate(model = "-PC1")
+
+pc2_effect <- lmer(data = principal_comp, 
+                   formula = PC2/pca_sigma$PC2 ~ (1|ID) + Pub + pol_knowledge +
+                      Pub_familiar + Pub:Pub_familiar + 
+                      Pub:(CRN_vs_NoCRN:Pub_familiar + Mixed_vs_Pol +
+                        pol_leaning)) %>% 
+  tidy() %>% filter(str_detect(term, "CRN_vs_NoCRN")) %>% mutate(model = "PC2")
+pc_effect <- rbind(pc1_effect, pc2_effect)
+return(pc_effect)
+}
+
+REM_treatment <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ (1|ID) + Pub +
+                      Pub:Pub_familiar + Pub_familiar + 
+                      Pub:(treatment:Pub_familiar + pol_leaning))
+  trust_effect_df <- tidy(trust_effect)  %>%
+  filter(str_detect(term, "treatment")) %>% 
+  mutate(model = "trust")
+
+  false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  false_effect_df <- tidy(false_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "false")
+
+  credible_effect <- lmer(data = output_measures, 
+                    formula = credible/sigma$credible ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  credible_effect_df <- tidy(credible_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "credible")
+
+  informative_effect <- lmer(data = output_measures, 
+                    formula = informative/sigma$informative ~ (1|ID) + Pub +
+                      Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  informative_effect_df <- tidy(informative_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "informative")
+
+  biased_effect <- lmer(data = output_measures, 
+                    formula = biased/sigma$biased ~ (1|ID) + Pub + Pub_familiar +
+                      Pub:(treatment:Pub_familiar + pol_leaning) + Pub:Pub_familiar)
+  biased_effect_df <- tidy(biased_effect)  %>%
+  filter(str_detect(term, "treatment")) %>%
+  mutate(model = "biased")
+  effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+return(effects_df)
+}
+
+REM_total <- function(output_measures){
+  sigma <- as.data.frame(t(apply(output_measures %>% filter(CRN == "c1") %>%
+              select(informative:trustworthy), 2, sd)))
+  trust_effect <- lmer(data = output_measures, 
+                    formula = trustworthy/sigma$trustworthy ~ Pub + CRN_vs_NoCRN +
+                      Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+trust_effect_df <- tidy(trust_effect) %>% 
+  filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "trust") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+false_effect <- lmer(data = output_measures, 
+                    formula = false/sigma$false ~ Pub + CRN_vs_NoCRN + Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+false_effect_df <- tidy(false_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "false") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+credible_effect <- lmer(data = output_measures, 
+                       formula = credible/sigma$credible ~ Pub + CRN_vs_NoCRN +
+                         Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+credible_effect_df <- tidy(credible_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "credible") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+biased_effect <- lmer(data = output_measures, 
+                     formula = biased/sigma$biased ~ Pub + CRN_vs_NoCRN + 
+                       Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+biased_effect_df <- tidy(biased_effect) %>% 
+   filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "biased") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+informative_effect <- lmer(data = output_measures, 
+                          formula = informative/sigma$informative ~ Pub + 
+                            CRN_vs_NoCRN + Mixed_vs_Pol +
+                      (1|ID) + pol_leaning + Pub_familiar)
+informative_effect_df <- tidy(informative_effect) %>% 
+    filter(term == "CRN_vs_NoCRN" | term == "Mixed_vs_Pol") %>%
+  mutate(model = "informative") %>%
+  mutate(pvalue = 2*pnorm(-abs(statistic)))
+
+effects_df <- rbind(trust_effect_df, false_effect_df, 
+                    credible_effect_df, biased_effect_df, informative_effect_df)
+}
+```
+
+
+#### Extracting columns corresponding to different output measures
+
+```{r, echo=FALSE}
+crn_trustworthy <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_1")) %>% rowid_to_column(var = "ID")
+crn_false <- select(crn_experiment_data, starts_with("p")) %>% 
+  select(ends_with("_2")) %>% rowid_to_column(var = "ID")
+crn_credible <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_3")) %>% rowid_to_column(var = "ID")
+crn_biased <- select(crn_experiment_data, starts_with("p")) %>% 
+  select(ends_with("_4")) %>% rowid_to_column(var = "ID")
+crn_informative <- select(crn_experiment_data, starts_with("p")) %>%
+  select(ends_with("_5")) %>% rowid_to_column(var = "ID")
+kable(head(crn_trustworthy, n = 10))
+```
+
+#### Forming dataframes where there are four rows for each user and one column for their answer in each CRN condition
+
+```{r, echo=FALSE}
+trustworthy_cf <- crn_trustworthy %>% 
+  gather(key = "P_C", -"ID", value = "value") %>%
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+false_cf <- crn_false %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+credible_cf <- crn_credible %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+biased_cf <- crn_biased %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>% 
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+
+informative_cf <- crn_informative %>% 
+  gather(key = "P_C", -"ID", value = "value") %>% 
+  arrange(desc(-ID)) %>% 
+  mutate(Pub = substr(P_C, 2,2), CRN = substr(P_C, 3,4)) %>%
+  spread(CRN, value) %>% 
+  filter(is.na(c1) + is.na(c2) + is.na(c3) < 3) %>% select(-P_C)
+kable(head(trustworthy_cf, n = 10))
+```
+
+#### Putting all different measures in one dataframe(output_measures), where the CRN condition is specified in a separate column itself. So we have a dataframe in which there are four rows for each user and you can see that user's answer to 5 different credibility questions for a publisher(Pub) and treatment condition(CRN).
+
+```{r, echo=FALSE}
+trustworthy_dummy <- trustworthy_cf %>% 
+  gather("CRN", value = "trustworthy", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+false_dummy <- false_cf %>% 
+  gather("CRN", value = "false", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+credible_dummy <- credible_cf %>% 
+  gather("CRN", value = "credible", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+biased_dummy <- biased_cf %>% 
+  gather("CRN", value = "biased", c1:c3) %>%
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3))
+
+informative_dummy <- informative_cf %>% 
+  gather("CRN", value = "informative", c1:c3) %>% 
+  arrange(-desc(ID)) %>% na.omit() %>%
+  mutate_at(funs(factor), .vars = c(2,3)) 
+
+output_measures <- Reduce(function(x, y) merge(x, y, by = c("ID", "Pub", "CRN")), 
+                          list(informative_dummy, biased_dummy, credible_dummy, 
+                               false_dummy, trustworthy_dummy)) %>% arrange(-desc(ID))
+levels(output_measures$Pub) <- c("CNN", "FoxNews", "Atlantic", "SacBee")     
+
+# Extracting useful covariates 
+covariates <- crn_experiment_data %>% 
+  select(Q32, Q845_12:Q845_15, Q384_12:Q384_15, Q849_12:Q849_15) %>% 
+  rowid_to_column(var = "ID") %>% 
+  rename(pol_leaning = Q32, familiar_Fox = Q845_12, familiar_Atlantic = Q845_13,
+         familiar_CNN = Q845_14, familiar_SacBee = Q845_15, truthful_Fox = Q384_12,
+         truthful_Atlantic = Q384_13, truthful_CNN = Q384_14, 
+         truthful_SacBee = Q384_15, trust_Fox = Q849_12, trust_Atlantic = Q849_13,
+         trust_CNN = Q849_14, trust_SacBee = Q849_15) %>%
+  mutate_at(funs(factor), .vars = -1) %>% mutate(Pub_familiar = NA)
+
+output_measures <- merge(output_measures, covariates, by = "ID")
+
+output_measures$Pub_familiar[output_measures$Pub == "CNN"] <- output_measures$familiar_CNN[output_measures$Pub == "CNN"]
+output_measures$Pub_familiar[output_measures$Pub == "FoxNews"] <- output_measures$familiar_Fox[output_measures$Pub == "FoxNews"]
+output_measures$Pub_familiar[output_measures$Pub == "Atlantic"] <- output_measures$familiar_Atlantic[output_measures$Pub == "Atlantic"]
+output_measures$Pub_familiar[output_measures$Pub == "SacBee"] <- output_measures$familiar_SacBee[output_measures$Pub == "SacBee"]
+output_measures$Pub_familiar <- as.factor(output_measures$Pub_familiar)
+levels(output_measures$Pub_familiar) <- c("No", "No", "Yes")
+output_measures <- output_measures %>% mutate(fam_rate = ifelse(Pub %in% c("CNN", "FoxNews"), "High", 
+                                ifelse(Pub %in% c("Atlantic"), "Medium", "Low"))) %>%
+  
+  mutate(pol_rate = ifelse(Pub %in% c("CNN", "Atlantic"), "Liberal", ifelse(Pub %in% c("FoxNews"), "Conservative", "Neutral/Local"))) %>%
+  mutate(CRN_vs_NoCRN = 1/3*as.numeric(CRN == "c2") + 1/3*as.numeric(CRN == "c3") -
+           2/3 * as.numeric(CRN == "c1"),
+         Mixed_vs_Pol = 1/2*as.numeric(CRN == "c2") - 1/2*as.numeric(CRN == "c1"))
+output_measures$treatment <- as.numeric(output_measures$CRN != "c1")
+# Political Knwoledge
+political_knowledge <- crn_experiment_data %>% rowid_to_column(var = "ID") %>% select(ID, Q42, Q44, Q46, Q48, Q50) %>%
+  mutate(pol_knowledge = as.factor(ifelse((ifelse(Q42 == "The Supreme Court", 1, 0) + 
+           ifelse(Q44 == "The President", 1, 0) + 
+           ifelse(Q46 == "Theresa May", 1, 0) + 
+           ifelse(Q48 == "Speaker of the House", 1, 0) +
+           ifelse(Q50 == "Treasury Secretary", 1, 0)) >= 3, "high", "low"))) %>% select(ID, pol_knowledge)
+output_measures<- merge(output_measures, political_knowledge, by = "ID")
+kable(head(output_measures, n = 10))
+```
+```{r}
+output_estimate_exp1 <- output_measures
+output_estimate_exp1$false_inverse <- 5 - output_estimate_exp1$false
+output_estimate_exp1$biased_inverse <- 5 - output_estimate_exp1$biased
+output_estimate_exp1$mean_estimate <- rowMeans(subset(output_estimate_exp1, select = c(trustworthy, informative, credible, false_inverse, biased_inverse)), na.rm = TRUE)
+
+output_estimate_exp1$mean_estimate_positive <- rowMeans(subset(output_estimate_exp1, select = c(trustworthy, informative, credible)), na.rm = TRUE)
+
+output_estimate_exp1$mean_estimate_negative <- rowMeans(subset(output_estimate_exp1, select = c(false_inverse, biased_inverse)), na.rm = TRUE)
+output_estimate_exp1[, "max_estimate"] <- apply(output_estimate_exp1[,c("trustworthy", "informative", "credible", "false_inverse", "biased_inverse")], 1, max, na.rm = TRUE)
+
+output_estimate_exp1 <- output_estimate_exp1 %>% mutate(avg =1/5*(trustworthy+(5-false)+(5-biased)+credible+informative))
+avg_sigma1 <- sd((output_estimate_exp1 %>% filter(CRN == "c1"))$avg)
+```
+
+
+## Combined measure for 5,026 people (NaNs omits in computing average)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + CRN_vs_NoCRN) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate + CRN_vs_NoCRN:fam_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate +  fam_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate + CRN_vs_NoCRN:pol_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate +  pol_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+## Combined positive measures (... same as above)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + CRN_vs_NoCRN) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate + CRN_vs_NoCRN:fam_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate +  fam_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate + CRN_vs_NoCRN:pol_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_positive/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate +  pol_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+## Combined negative measures (... same as above)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + CRN_vs_NoCRN) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate + CRN_vs_NoCRN:fam_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + fam_rate +  fam_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate + CRN_vs_NoCRN:pol_rate) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate_negative/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_rate +  pol_rate:Mixed_vs_Pol) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+## Political Rates
+```{r}
+```
+
+## Publisher Effects
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + CRN_vs_NoCRN:Pub) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + Pub_familiar + Pub_familiar:Pub + Pub_familiar:CRN_vs_NoCRN:Pub) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + Mixed_vs_Pol:Pub) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + Pub_familiar + Pub_familiar:Pub + Pub_familiar:Mixed_vs_Pol:Pub) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+## Individual Effects (Political Leaning)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_leaning + CRN_vs_NoCRN:pol_leaning) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_leaning + Mixed_vs_Pol:pol_leaning) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+# Individual Effects (Need For Cognition)
+```{r}
+```
+
+```{r}
+age <- crn_experiment_data %>% select(Q3) %>% rename (age=Q3) %>% rowid_to_column("ID")
+age$year <- age$age
+age$age <- as.Date(paste(age$age , 1, 1, sep = "-"))
+age$age[is.na(age$age)] <- Sys.Date()
+age$age <- floor(age_calc(age$age, units = "years"))
+age$bin_age <- cut(age$age, seq(0, 90, 10))
+output_estimate_exp1 <- inner_join(output_estimate_exp1, age)
+
+gender <- crn_experiment_data %>% select(Q2) %>% rename (gender=Q2) %>% rowid_to_column("ID")
+output_estimate_exp1 <- inner_join(output_estimate_exp1,gender)
+
+
+
+
+education <- crn_experiment_data %>% select(Q14) %>% rename (education=Q14) %>% rowid_to_column("ID")
+education$education_level <- education$education
+education <- education %>%
+      mutate(val = ifelse(education_level == "Did not graduate from high school",1, 
+                          ifelse(education_level == "High school graduate", 2, 
+                          ifelse(education_level == "Some college, but no degree", 3, 
+                          ifelse(education_level == "2-year college degree", 4, 
+                          ifelse(education_level == "4-year college degree",5,6))))))
+output_estimate_exp1 <- inner_join(output_estimate_exp1, education)
+```
+# Individual Effects (Age)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + bin_age + CRN_vs_NoCRN:bin_age) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + bin_age + Mixed_vs_Pol:bin_age) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+# Individual Effects (Education)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + as.character(val) + CRN_vs_NoCRN:as.character(val)) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + as.character(val) + Mixed_vs_Pol:as.character(val)) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
+
+# Individual Effects (Political Interest)
+```{r}
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_knowledge + CRN_vs_NoCRN:pol_knowledge) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+
+lmer(data = output_estimate_exp1,
+     formula = mean_estimate/avg_sigma1 ~ (1|ID) + (1|Pub) + pol_knowledge + Mixed_vs_Pol:pol_knowledge) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Average Treatment Effect") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash")
+```
