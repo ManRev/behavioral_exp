@@ -9,8 +9,10 @@ This GitHub gathers the Data and Code used in two behavioral experiments that in
   - python code generate the filled html code with the ads chosen from the CSV files
   - html folder contains the output of the python files with filled html codes for the ads
 
-**Stimuli1 and Stimuli2** images used in the experiments 1 (all) and 2 (representative sample) respectively. A Dropbox can be shared if you want full access to all stimuli. 
+**Stimuli1 and Stimuli2** images used in the experiments 1 (all) and 2 (representative sample) respectively. A Dropbox can be shared if you want full access to all stimuli. Reach out at mrevel@mit.edu. 
 
 ### **experiments: Code and Data to analyze the results of the experiments:**
   - data_exp1 and data_exp2: csv with results of experiments and tables ready to be analyzed 
   - R codes to create the tables in the right format for analysis as well as R code with models used in analysis
+  - main_datacleaning.py: python code to clean the raw data from Experiment 1, recovering the randomization. 
+
