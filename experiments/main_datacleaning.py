@@ -9,17 +9,12 @@ import csv
 # cond == "mixed_pol" for control (mixed CRN) treatment (pol CRN)
 cond = "all_3"
 
-path = "/Users/Manon/Desktop/Current/Projects/behavioral_exp/data/results.csv"
+path = "results.csv"
 data = pd.read_csv(path)
 print(list(data.columns.values))
 
 
 effects = ["trustworthy", "false", "credible", "biased", "provide news information"]
-#print(data["FL_13_DO"])
-
-#data.set_index("StartDate")
-#date = "2019-02-12 18:49:01 "
-#data = data.loc[data["StartDate"] > date]
 
 mapping = {"Strongly agree": 5, "Somewhat agree":4, "Neither agree nor disagree":3,
            "Somewhat disagree":2, "Strongly disagree":1}
@@ -72,7 +67,6 @@ p4c3_count = 0
 data = data.iloc[3:]
 for index, rows in data.iterrows():
     if rows["FL_13_DO"] == "FL_17":
-        #print(rows["FL_436_DO"])
         p1c1_count += 1
         p2c1_count += 1
         p3c2_count += 1
