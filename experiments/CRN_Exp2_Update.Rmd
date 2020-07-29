@@ -1,0 +1,822 @@
+---
+title: "CRN Behavioral Experiment 2 - Report"
+author: "Amir Tohidi and Manon Revel"
+date: "11/24/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Second Experiment
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE)
+#library(nFactors)
+library(tidyverse) 
+library(reshape2)
+library(lme4)
+library(corrplot)
+library(jtools)
+library(dotwhisker)
+library(broom)
+library(knitr)
+library(ggfortify)
+library(nlme)
+library(simr)
+library(pscl)
+library(foreign)
+library("gdata")
+#library(psych)
+library(GPArotation)
+library('ri2') 
+#library(lmerTest)
+library(grid)
+library(eeptools)
+library(ggthemes)
+
+```
+
+## Functions
+
+```{r}
+##### Plots setting
+theme_Publication <- function(base_size=14, base_family="helvetica") {
+     (theme_foundation()
+       + theme(plot.title = element_text(face = "bold",
+                                         size = rel(1.2), hjust = 0.5),
+               text = element_text(),
+               panel.background = element_rect(colour = NA),
+               plot.background = element_rect(colour = NA),
+               panel.border = element_rect(colour = NA),
+               axis.title = element_text(face = "bold",size = rel(1)),
+               axis.title.y = element_text(angle=90,vjust =2),
+               axis.title.x = element_text(vjust = -0.2),
+               axis.text = element_text(), 
+               axis.line = element_line(colour="black"),
+               axis.ticks = element_line(),
+               panel.grid.major = element_line(colour="#f0f0f0"),
+               panel.grid.minor = element_blank(),
+               legend.key = element_rect(colour = NA),
+               legend.position = "bottom",
+               legend.direction = "horizontal",
+               legend.key.size= unit(0.2, "cm"),
+               legend.margin = unit(0, "cm"),
+               legend.title = element_text(face="italic"),
+               plot.margin=unit(c(10,5,5,5),"mm"),
+               strip.background=element_rect(colour="#f0f0f0",fill="#f0f0f0"),
+               strip.text = element_text(face="bold")
+          ))
+      
+}
+
+scale_fill_Publication <- function(...){
+      library(scales)
+      discrete_scale("fill","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+}
+
+scale_colour_Publication <- function(...){
+      library(scales)
+      discrete_scale("colour","Publication",manual_pal(values = c("#386cb0","#fdb462","#7fc97f","#ef3b2c","#662506","#a6cee3","#fb9a99","#984ea3","#ffff33")), ...)
+}
+```
+
+## Reading and cleaning the experiment data
+
+```{r, echo=FALSE}
+crn_experiment_data2 <- read.csv("/Users/Manon/Desktop/Bureau/Experiment2_February2020.csv") %>%
+  filter(Finished != "False" & Q1 == "I agree to participate")
+
+crn_experiment_data2 <- read.csv("/Users/atohidi/Dropbox (MIT)/Research/Projects/CRN-Project/Behavioral Experiment/Second Experiment/Data/Exp2_final_data.csv") %>%
+  filter(Finished != "False" & Q1 == "I agree to participate")
+```
+
+
+
+
+```{r}
+treatment <- crn_experiment_data2 %>% select(paste("image", 0:5, sep = "")) %>% 
+  rowid_to_column("ID") %>% 
+  gather(key = "image", value = "stimuli", ... = -ID) %>% arrange(ID) %>%
+  separate(col = stimuli, into = c('NA', 'NA1', 'NA2', 'NA3', "Publisher", "Article", "CRN", 'NA4'), sep = "_|/") %>% 
+  separate(col = CRN, into = c("CRN", 'NA')) %>% select(-image)
+
+trustworthy <- crn_experiment_data2 %>% select(Q722_1, Q729_1, Q730_1, Q731_1, Q732_1, Q733_1) %>% 
+  rowid_to_column("ID") %>% 
+  gather(key = "question", value = "trust", ... = -ID) %>% arrange(ID) %>% select(trust) %>%
+  mutate(trust = unclass(factor(trust, levels = c("Strongly disagree", "Somewhat disagree", "Neither agree nor disagree",
+                                                 "Somewhat agree", "Strongly agree"))))
+
+false <- crn_experiment_data2 %>% select(Q722_2, Q729_2, Q730_2, Q731_2, Q732_2, Q733_2) %>%  
+  rowid_to_column("ID") %>% 
+  gather(key = "question", value = "false", ... = -ID) %>% arrange(ID) %>% select(false) %>%
+  mutate(false = unclass(factor(false, levels = c("Strongly disagree", "Somewhat disagree", "Neither agree nor disagree",
+                                                 "Somewhat agree", "Strongly agree"))))
+
+biased <- crn_experiment_data2 %>% select(Q722_3, Q729_3, Q730_3, Q731_3, Q732_3, Q733_3) %>%  
+  rowid_to_column("ID") %>% 
+  gather(key = "question", value = "biased", ... = -ID) %>% arrange(ID) %>% select(biased) %>%
+  mutate(biased = unclass(factor(biased, levels = c("Strongly disagree", "Somewhat disagree", "Neither agree nor disagree",
+                                                 "Somewhat agree", "Strongly agree"))))
+
+credible <- crn_experiment_data2 %>% select(Q722_4, Q729_4, Q730_4, Q731_4, Q732_4, Q733_4) %>%  
+  rowid_to_column("ID") %>% 
+  gather(key = "question", value = "credible", ... = -ID) %>% arrange(ID) %>% select(credible) %>%
+  mutate(credible = unclass(factor(credible, levels = c("Strongly disagree", "Somewhat disagree", "Neither agree nor disagree",
+                                                 "Somewhat agree", "Strongly agree"))))
+
+informative <- crn_experiment_data2 %>% select(Q722_5, Q729_5, Q730_5, Q731_5, Q732_5, Q733_5) %>%  
+  rowid_to_column("ID") %>% 
+  gather(key = "question", value = "informative", ... = -ID) %>% arrange(ID) %>% select(informative) %>%
+  mutate(informative = unclass(factor(informative, levels = c("Strongly disagree", "Somewhat disagree", "Neither agree nor disagree",
+                                                 "Somewhat agree", "Strongly agree"))))
+
+output2 <- cbind(treatment, trustworthy, false, biased, credible, informative) 
+####### extracting some of the relevant features of the data from the survey
+
+familiarity <- crn_experiment_data2 %>% select(Q845_12:Q845_19) %>% 
+  rename(fox = Q845_12, atlantic = Q845_13, cnn = Q845_14, sacbee = Q845_15, 
+         vox = Q845_16, daytonabeach = Q845_17, denverpost = Q845_18, usatoday = Q845_19) %>% 
+  mutate_at(funs(factor), .vars = 1:8) %>% rowid_to_column("ID") %>% 
+  inner_join(treatment, by = "ID") %>% select(-Article, -CRN) %>% 
+  gather(key = "Source", value = "familiarity", ... = -c(Publisher,ID)) %>%
+  filter(Publisher == Source) %>% arrange(ID) %>% select(ID, Publisher, familiarity) 
+
+# imputing NAs in familiarity with No
+familiarity$familiarity <- ifelse(is.na(familiarity$familiarity) , "NA", familiarity$familiarity)
+output2 <- inner_join(output2, familiarity)
+
+# media_balance <- crn_experiment_data2 %>% select(Q384_12:Q384_19) %>% 
+#   rename(fox = Q384_12, atlantic = Q384_13, cnn = Q384_14, sacbee = Q384_15, 
+#          vox = Q384_16, daytonabeach = Q384_17, denverpost = Q384_18, usatoday = Q384_19) %>% 
+#   mutate_at(funs(factor), .vars = 1:8) %>% rowid_to_column("ID") %>% 
+#   inner_join(treatment, by = "ID") %>% select(-Article, -CRN) %>% 
+#   gather(key = "Source", value = "media_balance", ... = -c(Publisher,ID)) %>%
+#   filter(Publisher == Source) %>% arrange(ID) %>% select(ID, Publisher, media_balance)
+
+features <- crn_experiment_data2 %>% select(Q735, Q737, Q32, Q42, Q3, Q2, Q14, Q738, Q740) %>%
+  rename(ad_notice = Q735, ad_blocker = Q737, pol_leaning = Q32, nct_1 = Q738, nct_2 = Q740, 
+         pol_interest=Q42, age=Q3, gender=Q2, education=Q14) %>% rowid_to_column("ID") %>% 
+  mutate(nct_1 = as.numeric(nct_1 == "Like it"), nct_2 = as.numeric(nct_2 == "Complex")) %>% 
+  mutate(age = 2019 - as.numeric(age)) %>% 
+  mutate(nfc_score_1 = nct_1) %>%
+  mutate(nfc_score_2 = nct_2) %>%
+  mutate_at(funs(factor), .vars = c("ad_notice", "ad_blocker", "pol_leaning", "pol_interest", "gender", "education"))
+
+screeners <- crn_experiment_data2 %>% rowid_to_column(var = "ID") %>% 
+  select(ID, Q773, Q797, Q1_1, Q1_6) %>% 
+  rename(scr_color = Q773, scr_web = Q797, scr_grid_ww2 = Q1_1, scr_grid_middle = Q1_6) %>%
+  mutate(scr_color = as.numeric(scr_color == "Red,Green"), 
+         scr_web = as.numeric(scr_web == "The Drudge Report,ABC News website"), 
+         scr_grid_ww2 = as.numeric(scr_grid_ww2 == "Disagree\nstrongly" | scr_grid_ww2 == "Disagree"),
+         scr_grid_middle = as.numeric(scr_grid_middle == "Neither agree nor disagree")) %>% 
+  mutate(attention_1 = scr_color) %>% 
+  mutate(attention_2 = scr_web) %>% 
+  mutate(attention_3 = scr_grid_ww2) %>% 
+  mutate(attention_4 = scr_grid_middle) 
+
+output2 <- inner_join(output2, inner_join(features, screeners))
+
+#creating separate columns for different treatment conditions
+
+output2 <- output2 %>% mutate(fam_rate = ifelse(Publisher %in% c("cnn", "fox", "usatoday"), "High", 
+                                ifelse(Publisher %in% c("atlantic", "denverpost"), "Medium", "Low"))) %>%
+  mutate(pol_rate = ifelse(Publisher %in% c("cnn", "atlantic", "vox"), "Liberal", ifelse(Publisher %in% c("fox"), "Conservative", "Neutral/Local"))) %>%
+  mutate(Batch = ifelse(Publisher %in% c("cnn", "fox", "denver_post", "vox"), 1, 2)) %>%
+  mutate(CRN_leaning = ifelse(CRN == "hqpol" &  Batch == 1, "Left", 
+                              ifelse(CRN == "hqpol" & Batch == 2, "Right", "Neutral"))) %>%
+  mutate_at(.funs = factor, .vars = "CRN_leaning") %>%
+  mutate(CRN_quality_general = ifelse(CRN %in% c("lq", "lqpol"), "Lq", 
+                              ifelse(CRN %in% c("hq", "hqpol"), "Hq", "NA"))) %>%
+  mutate(CRN_quality_Pol = if_else(CRN %in% c("hqpol"), "Hq",
+                if_else(CRN %in% c("lqpol"), "Lq",
+                if_else(CRN %in% c("na"), "nap", if_else(CRN %in% c("hq", "lq"), "nose", "NA") ))))  %>%
+  mutate(CRN_quality_NonPol = ifelse(CRN %in% c("lq"), "Lq", 
+                              ifelse(CRN %in% c("hq"), "Hq", 
+                              if_else(CRN %in% c("na"), "nap", if_else(CRN %in% c("hqpol", "lqpol"), "nose", "NA"))))) %>%
+  mutate(CRN_type = ifelse(CRN %in% c("lqpol", "hqpol"), "Pol", 
+                              ifelse(CRN %in% c("lq", "hq"), "NonPol", "NA"))) %>%
+  mutate_at(.funs = factor, .vars = c("CRN_type", "CRN_quality_general", "CRN_quality_Pol", "CRN_quality_NonPol", "fam_rate", "pol_rate", "Publisher", "Article", "CRN",  "familiarity", "ad_notice", "ad_blocker", "pol_leaning")) %>%
+  mutate(CRN_vs_NA = 1/3*as.numeric(CRN_quality_general == "Lq") + 1/3*as.numeric(CRN_quality_general == "Hq") -
+           2/3 * as.numeric(CRN_quality_general == "NA"),
+         Hq_vs_Lq = 1/2*as.numeric(CRN_quality_general == "Lq") - 1/2*as.numeric(CRN_quality_general == "Hq"),
+           Hq_vs_NA = 1/2*as.numeric(CRN_quality_general == "Hq") - 1/2*as.numeric(CRN_quality_general == "NA"),
+  Clickbait_vs_NA = 1/2*as.numeric(CRN_quality_general == "Lq") - 1/2*as.numeric(CRN_quality_general == "NA")) %>%
+  mutate(CRN_vs_NA_pol = 1/3*as.numeric(CRN_quality_Pol == "Lq") + 1/3*as.numeric(CRN_quality_Pol == "Hq") -
+           2/3 * as.numeric(CRN_quality_Pol == "nap"),
+         Hq_vs_Lq_pol = 1/2*as.numeric(CRN_quality_Pol == "Hq") - 1/2*as.numeric(CRN_quality_Pol == "Lq")) %>%
+  mutate(CRN_vs_NA_nonpol = 1/3*as.numeric(CRN_quality_NonPol == "Lq") + 1/3*as.numeric(CRN_quality_NonPol == "Hq") -
+           2/3 * as.numeric(CRN_quality_NonPol == "nap"),
+         Hq_vs_Lq_nonpol = 1/2*as.numeric(CRN_quality_NonPol == "Hq") - 1/2*as.numeric(CRN_quality_NonPol == "Lq")) %>%
+mutate(Political_vs_NonPolitical = 1/2*as.numeric(CRN_type == "Pol") - 1/2*as.numeric(CRN_type == "NonPol"))
+
+output2$CRN_quality_general <- factor(output2$CRN_quality_general, levels(output2$CRN_quality_general)[c(3,2,1)])
+output2$CRN_quality_Pol <- factor(output2$CRN_quality_Pol, levels(output2$CRN_quality_Pol)[c(3,2,1)])
+output2$CRN_quality_NonPol <- factor(output2$CRN_quality_NonPol, levels(output2$CRN_quality_NonPol)[c(3,2,1)])
+#output2$CRN_type <- factor(output2$CRN_type, levels(output2$CRN_type)[c(2,3,1)])
+output2$CRN_leaning <- factor(output2$CRN_leaning, levels(output2$CRN_leaning)[c(3,1,2)])
+
+#imputing missing responses with the mean score for that user
+
+output2$false_inverse <- 6 - output2$false
+output2$biased_inverse <- 6 - output2$biased
+output2$mean_estimate <- rowMeans(subset(output2, 
+                                         select = c(trust, informative, credible, false_inverse, biased_inverse)), na.rm = TRUE)
+
+#output2$mean_estimate_positive <- rowMeans(subset(output2, select = c(trust, informative, credible)), na.rm = TRUE)
+#output2$mean_estimate_negative <- rowMeans(subset(output2, select = c(false_inverse, biased_inverse)), na.rm = TRUE)
+
+output2[, "max_estimate"] <- apply(output2[,c("trust", "informative", "credible", "false_inverse", "biased_inverse")], 1, max, na.rm = TRUE)
+
+output2$trust <- ifelse(is.na(output2$trust), output2$mean_estimate, output2$trust)
+output2$credible <- ifelse(is.na(output2$credible), output2$mean_estimate, output2$credible)
+output2$informative <- ifelse(is.na(output2$informative), output2$mean_estimate, output2$informative)
+output2$false_inverse <- ifelse(is.na(output2$false_inverse), output2$mean_estimate, output2$false_inverse)
+output2$biased_inverse <- ifelse(is.na(output2$biased_inverse), output2$mean_estimate, output2$biased_inverse)
+output2$false <- 6 - output2$false_inverse
+output2$biased <- 6 - output2$biased_inverse
+
+## Remove the people who have NaNs mean estimate (who replied to 0 questions for one article), there are 13 such persons 
+#output2 <- output2 %>% filter(is.na(output2$mean_estimate) == 0)
+new_df <- output2[!is.na(output2$mean_estimate),]
+output2 <- new_df[new_df$ID %in% names(which(table(new_df$ID) > 5)), ]
+
+
+res <- rowMeans(output2[,c("nfc_score_1", "nfc_score_2")], na.rm=TRUE)
+res[rowSums(is.na(select(output2, nfc_score_1, nfc_score_2)))==2] <- NA
+output2$nfc_score  <- res
+
+
+res <- rowMeans(output2[,c("attention_1", "attention_2", "attention_3", "attention_4")], na.rm=TRUE)
+res[rowSums(is.na(select(output2, attention_1, attention_2, attention_3, attention_4)))==4] <- NA
+output2$attention <- res
+
+
+
+######### computing principal components
+output_pca <- prcomp(dplyr::select(output2, trust:informative), 
+                     center = TRUE, scale. = TRUE)
+#summary(output_pca)
+autoplot(output_pca, data = output2, colour = "CRN", loadings = TRUE,
+         loadings.label = TRUE)
+output2 <- output2 %>% mutate(PC1 = output_pca$x[,1], PC2 = output_pca$x[,2])
+
+pca_sigma <- as.data.frame(t(apply(output2 %>% filter(CRN == "na") %>%
+              dplyr::select(PC1, PC2), 2, sd)))
+
+avg_sigma <- sd((output2 %>% filter(CRN == "na"))$mean_estimate)
+
+```
+
+## Some interesting plots
+
+#### Plotting Dot product and Rank Correlation for credibility measures
+```{r, echo=FALSE}
+correlation <- cor(select(output2, trust:informative))
+rank_correlation <- cor(dplyr::select(output2, trust:informative), 
+                        method = "spearman")
+corrplot(correlation, type="upper", method = "number", 
+         title = "dot product correlation")
+corrplot(rank_correlation, type="upper", method = "number")
+```
+
+#### Histogram of political leaning
+```{r}
+output2 %>% group_by(ID) %>% 
+  summarise(pol_leaning = unique(pol_leaning)) %>% filter(pol_leaning != "") %>%
+  ggplot(aes(x = pol_leaning)) + geom_bar() + 
+  ggtitle("Histogram of political leaning") %>% theme_Publication() 
+```
+
+
+#### Mean response to different questions for each publisher
+```{r, echo=FALSE}
+output2 %>% gather ("question", "answer", trust:informative) %>% 
+  group_by(Publisher, question) %>% 
+  summarise(mean_response = mean(answer)) %>% ungroup() %>% 
+  ggplot(aes(x = Publisher, y = mean_response)) +
+  geom_col(position = "dodge2") + facet_wrap(~ question) + theme_Publication() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("Mean response to different questions") 
+```
+
+```{r, echo=FALSE}
+output2 %>% gather ("question", "answer", trust:informative) %>% 
+  group_by(Publisher, question, familiarity) %>% 
+  summarise(mean_response = mean(answer)) %>% ungroup() %>% 
+  ggplot(aes(x = Publisher, y = mean_response, fill = familiarity)) +
+  geom_col(position = "dodge2") + facet_wrap(~ question) + theme_Publication() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ggtitle("Mean response to different questions and user familiarity condition")
+```
+
+
+#### Mean response based on party affiliation
+```{r}
+output2 %>% select(mean_estimate, pol_leaning, Publisher) %>% na.omit() %>%
+  gather ("question", "answer", mean_estimate) %>% 
+  group_by(Publisher, question, pol_leaning) %>% 
+  summarise(mean_response = mean(answer)) %>% ungroup() %>% 
+  ggplot(aes(x = Publisher, y = mean_response, fill = pol_leaning)) +
+  geom_col(position = "dodge2") + facet_wrap(~ question) +
+  ggtitle("Mean response based on average score, for different publishers and party affiliations") + 
+  theme_Publication() + scale_colour_Publication() + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("")
+
+```
+
+
+#### Histogram of CRN conditions 
+```{r}
+output2 %>% ggplot(aes(x = CRN, fill = familiarity)) + 
+  geom_bar() + 
+  facet_wrap(~ Publisher, nrow = 1) + 
+  ggtitle("Histogram of CRN conditions") + theme_Publication() + scale_colour_Publication()  + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+
+
+#### Screener questions
+```{r}
+output2 %>%
+  ggplot(aes(x = attention)) + 
+  geom_bar(aes(y = (..count..)/sum(..count..))) +
+  ggtitle("Histogram of correct responses to screener questions") + theme_Publication() + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + ylab("perc")
+```
+
+
+#### Familiarity with different Publishers
+```{r}
+familiarity %>% na.omit() %>% group_by(Publisher) %>%
+  summarise(prop = sum(familiarity == "Yes")/n()) %>% 
+  arrange(desc(prop)) %>%
+  ggplot() + geom_col(mapping = aes(x = reorder(Publisher, -prop), y = prop)) + 
+  scale_y_continuous(labels = scales::percent_format()) + ylab("") + 
+  xlab("") + ggtitle("Familiarity rate of Publishers") + theme_Publication() + scale_colour_Publication() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  geom_hline(yintercept=.5, linetype="dashed", color = "red") + geom_hline(yintercept=.25, linetype="dashed", color = "red")
+```
+
+
+### Familiarity rates based on party affiliations
+```{r}
+ output2 %>% select(familiarity, pol_leaning) %>% na.omit() %>%
+  ggplot(aes(x = pol_leaning, fill = familiarity)) + 
+   geom_bar(position = "dodge2") + 
+   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+   xlab("") + ggtitle("Familiarity with the publisher based on party affiliations") + 
+   ylab("prop")
+```
+
+
+### Fraction of people who noticed CRNs based on ad blocker used
+```{r}
+output2 %>% select(ad_notice, ad_blocker) %>% na.omit() %>% 
+  ggplot(aes(x = ad_notice, fill = ad_blocker)) + 
+  geom_bar(aes(y = (..count..)/sum(..count..))) + theme_Publication() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("") + ggtitle("Fraction of people who noticed CRNs") + 
+  ylab("fraction")
+```
+
+### Relation of noticing ads and attention
+
+```{r eval = FALSE}
+output2 %>% select(ad_notice, attention) %>% na.omit() %>% mutate_at(funs(factor), .vars = "attention") %>%
+  ggplot(aes(x = ad_notice, fill = attention)) + 
+  geom_bar(aes(y = (..count..)/sum(..count..))) + theme_Publication() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("") + ggtitle("Fraction of people who noticed CRNs") + 
+  ylab("")
+
+output2 %>% select(ad_notice, attention) %>% na.omit() %>% mutate_at(funs(factor), .vars = "attention") %>% 
+  select(ad_notice, attention) %>%
+  group_by(ad_notice) %>% mutate(total = n()) %>% ungroup() %>%
+  group_by(attention, ad_notice) %>% mutate(count = n()) %>% unique() %>%
+  summarise(perc = count/total) %>% 
+  ggplot(aes(x = ad_notice, y = perc, fill = attention)) + 
+  geom_bar(stat="identity") + theme_Publication()
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("") + ggtitle("Fraction of people who noticed CRNs") + ylab("")
+```
+
+
+#### Main effect, without including the heterogeneity
+```{r}
+# distinguishing the effect of ads in general and high quality ads vs low quality ones
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA + Hq_vs_Lq) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating effect of political ads non-political ones
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_type) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   Political_vs_NonPolitical) %>% 
+  tidy() %>% filter(str_detect(term, "vs")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+```
+
+```{r}
+# distinguishing the effect of ads in general and high quality ads vs low quality ones
+summary(lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA + Hq_vs_Lq))
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+summary(lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general))
+
+# seperating effect of political ads non-political ones
+summary(lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_type))
+
+summary(lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   Political_vs_NonPolitical))
+```
+
+## Hypothesis 1: 
+
+#### Investigating the heterogeneity among different familiarity rates of publishers
+### Analysis based on the average score
+```{r}
+# distinguishing the effect of ads in general and high quality ads vs low quality ones
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) + fam_rate + 
+                                   familiarity  + pol_leaning + pol_interest + 
+                                   age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating effect of political ads non-political ones
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   Political_vs_NonPolitical:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "Pol")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+```
+
+#### Analysis based on principal components
+```{r}
+# distinguishing the effect of ads in general and high quality ads vs low quality ones
+lmer(data = output2,
+     formula = PC1/pca_sigma$PC1 ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the first principal component") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+lmer(data = output2,
+     formula = PC1/pca_sigma$PC1 ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_quality_general:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the first principal component") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+
+lmer(data = output2,
+     formula = PC2/pca_sigma$PC2 ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the second principal component") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+
+lmer(data = output2,
+     formula = PC2/pca_sigma$PC2 ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the second principal component") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+```
+
+#### Including the heterogeneity of user specific familiarity with the publisher 
+```{r}
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + fam_rate:familiarity + 
+                                   CRN_vs_NA:fam_rate:familiarity + Hq_vs_Lq:fam_rate:familiarity) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+lmer(data = output2,
+     formula = mean_estimate/avg_sigma  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + fam_rate:familiarity + 
+                                   CRN_quality_general:fam_rate:familiarity) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+lmer(data = output2,
+             formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+  familiarity  + pol_leaning + pol_interest + fam_rate + 
+                  ad_notice + age + gender + education + attention + nfc_score + pol_rate + pol_rate:pol_leaning + 
+                  Political_vs_NonPolitical:pol_rate:pol_leaning)  %>% 
+  tidy() %>% filter(str_detect(term, "Pol")  & str_detect(term, "pol_leaningDem")  & ( str_detect(term, "Dem")  | str_detect(term, "Rep")  | str_detect(term, "Ind") )) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+```
+
+### The effect of ad recognition on publisher evaluation
+```{r}
+lmer(data = output2[!grepl(" ", output2$ad_notice),],
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general:ad_notice) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN") & str_detect(term, "Medium")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Mean outcome ATE") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+
+lmer(data = output2[!grepl("NA", output2$ad_notice),],
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                                familiarity + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + fam_rate:ad_notice +
+                                                CRN_vs_NA:fam_rate:ad_notice + Hq_vs_Lq:fam_rate:ad_notice) %>% 
+  tidy() %>% 
+  filter(str_detect(term, "CRN")  & str_detect(term, "Medium")) %>%
+  dwplot(dodge_size = 0.6) + xlab("Mean outcome ATE") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + 
+  scale_colour_Publication() + theme_Publication()
+```
+
+
+## Hypothesis 2: 
+###  Is it not in the publishers? Interest to embed ads with a leaning that differ from theirs?
+```{r}
+lmer(output2, formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + pol_rate +
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                            pol_rate:CRN_leaning) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>% 
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+```
+
+```{r}
+lmer(output2, formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + pol_rate +
+                                   ad_notice + age + gender + education + attention + nfc_score +
+                                            Publisher:CRN_type) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>% 
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+```
+
+
+### Plot for row means and CIs per Publisher
+```{r}
+data_lq_ads <- output2 %>% filter(CRN_quality_general == "Lq")
+data_na_ads <- output2 %>% filter(CRN_quality_general == "NA")
+
+agg_data_lq <- data_lq_ads %>% group_by(Publisher) %>% summarise(mean=mean(mean_estimate), sd=sd(mean_estimate), n=n())
+agg_data_na <- data_na_ads %>% group_by(Publisher) %>% summarise(mean=mean(mean_estimate), sd=sd(mean_estimate), n=n())
+
+final_data <- merge(agg_data_lq, agg_data_na, by=c("Publisher"))
+
+ggplot(final_data, aes(x=mean.x, y=mean.y, xmin=mean.x-sd.x*1.96/sqrt(n.x), xmax=mean.x+sd.x*1.96/sqrt(n.x), ymin=mean.y-sd.y*1.96/sqrt(n.y), ymax=mean.y+sd.y*1.96/sqrt(n.y), colour=Publisher)) + geom_errorbarh() + geom_errorbar() + theme(legend.position="none") + geom_point(size=5) + geom_abline(intercept = 0, slope = 1) + labs(y="Mean rating score for publishers with no ads", x = "Mean rating scores for publishers with clickbait ads", title = "The comparative effects of clickbait ads \n per publihser") + theme(plot.title = element_text(hjust = 0.5))+ coord_fixed(ratio = 1)  + geom_text_repel(aes(label=Publisher),hjust=0, vjust=0, cex= 5) + theme(aspect.ratio=1)
+```
+
+
+## Factor Analysis
+
+### Parallel Analysis
+```{r}
+X <- dplyr::select(output2, trust:informative)
+ev <- eigen(cor(X)) # get eigenvalues
+ap <- parallel(subject=nrow(X),var=ncol(X), rep=100, cent=.05)
+nS <- nScree(x=ev$values, aparallel=ap$eigen$qevpea)
+plotnScree(nS)
+```
+
+
+### Exploratory Factor Analysis
+```{r}
+two_factor <- fa(r = cor(X), nfactors = 2, rotate = "varimax", fm = "minres")
+print(two_factor)
+print(two_factor$loadings,cutoff = 0.3)
+fa.diagram(two_factor)
+```
+
+
+## Normalizing effects in terms of heterogeneity of effect sizes among different pulishers or political leanings
+```{r}
+# max difference in mean responses to publishers: Max -> CNN, Min -> Daytonabeach
+mean_per_publisher <- output2 %>% group_by(Publisher) %>% summarise(mean_per_publisher = mean(mean_estimate)) %>%
+  arrange(-mean_per_publisher) %>% select(mean_per_publisher)
+max_diff_in_mean <- max(mean_per_publisher$mean_per_publisher) - min(mean_per_publisher$mean_per_publisher)
+
+# max difference in mean responses to publishers only for NA condition: Max -> Vox, Min -> Daytonabeach
+mean_per_publisher_na <- output2 %>% filter(CRN == "na") %>% group_by(Publisher) %>% 
+  summarise(mean_per_publisher = mean(mean_estimate)) %>%
+  arrange(-mean_per_publisher) %>% select(mean_per_publisher)
+max_diff_in_mean_na <- max(mean_per_publisher_na$mean_per_publisher) - min(mean_per_publisher_na$mean_per_publisher)
+
+# difference in mean ratings between Democrats and Republicans
+pol_mean <- output2 %>% group_by(pol_leaning) %>% summarise(pol_mean = mean(mean_estimate)) %>% 
+  filter(pol_leaning %in% c("Democrat","Republican"))
+diff_in_mean_pol <- max(pol_mean$pol_mean) - min(pol_mean$pol_mean)
+
+# partisan difference, democrats rating for CNN - republican's rating for fox
+democrat_CNN <- output2 %>% filter(pol_leaning == "Democrat" & Publisher == "vox", CRN == "na") %>% summarise(CNN_dem = mean(mean_estimate))
+republican_FOX <- output2 %>% filter(pol_leaning == "Republican" & Publisher == "vox", CRN == "na") %>% summarise(Fox_rep = mean(mean_estimate))
+partisan_dif <- democrat_CNN$CNN_dem - republican_FOX$Fox_rep
+
+#normalizing_factor <- max_diff_in_mean_na 
+
+cnn_fox <-  3.38 - 3.33
+
+normalizing_factor <- cnn_fox
+
+# distinguishing the effect of ads in general and high quality ads vs low quality ones
+lmer(data = output2,
+     formula = mean_estimate/normalizing_factor ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN") | str_detect(term, "Hq")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+
+# seperating the effect of ads based on their quality (comparing Hq and Lq with NA)
+lmer(data = output2,
+     formula = mean_estimate/normalizing_factor  ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate + 
+                                   ad_notice + age + gender + education + attention + nfc_score + 
+                                   CRN_quality_general:fam_rate) %>% 
+  tidy() %>% filter(str_detect(term, "CRN")) %>%
+  dwplot(dodge_size = 0.6) + xlab("ATE for the average score") +     
+  geom_vline(xintercept = 0, color = "black", alpha = 0.5, linetype = "longdash") + theme_Publication() + scale_colour_Publication()
+```
+
+
+## Comparing atlantic with no ads with other publishers with CB ads
+```{r}
+#### Comparing atlantic with no ads with other publishers with CB ads
+atlantic_CB <- mean(output2 %>% filter(Publisher == "atlantic", CRN_quality_general == "Lq") %>% pull(mean_estimate))
+atlantic_noAds <- mean(output2 %>% filter(Publisher == "atlantic", CRN == "na") %>% pull(mean_estimate))
+other_na <- output2 %>% filter(Publisher != "atlantic", CRN == "na") %>% group_by(Publisher) %>%
+  summarise(mean_CB = mean(mean_estimate))
+other_na$mean_CB <- other_na$mean_CB - atlantic_CB
+other_na$mean_CB <- other_na$mean_CB - atlantic_noAds
+other_na
+atlantic_noAds - atlantic_CB
+
+
+##### 
+model <- lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate)
+coef <- coef(model)
+coef$Publisher
+CNN_intercept <- coef$Publisher[2,1]
+FOX_intercept <- coef$Publisher[5,1]
+
+max(coef$Publisher[,1]) - min(coef$Publisher[,1])
+
+CNN_intercept - FOX_intercept
+0.046635 / (CNN_intercept - FOX_intercept) * 40
+
+max_diff_in_mean_na / (max(coef$Publisher[,1]) - min(coef$Publisher[,1])) * 30
+```
+
+
+#### Test of statistical significance of different effect sizes
+```{r}
+library(lmerTest)
+model <- lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate)
+
+model_2 <- lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA+ Hq_vs_Lq)
+
+summary(model)
+
+cov <- vcov(model)
+medium_low_cov <- cov[19, 18]
+medium_var <- cov[19,19]
+low_var <- cov[18,18]
+medium_effect <- summary(model)$coefficient[19]
+low_effect <- summary(model)$coefficient[18]
+2 * pnorm(-(medium_effect - low_effect)/sqrt(medium_var + low_var - 2*medium_low_cov)) #p_value of the difference between low and medium
+
+medium_high_cov <- cov[17, 19]
+high_effect <- summary(model)$coefficient[17]
+high_var <- cov[17,17]
+2 * pnorm(-(medium_effect - high_effect)/sqrt(medium_var + high_var - 2*medium_high_cov))
+
+## this package does the same test as above t-test using Chisq test
+library(car)
+linearHypothesis(model, "fam_rateMedium:Hq_vs_Lq = fam_rateHigh:Hq_vs_Lq", test = "Chisq")
+linearHypothesis(model, "fam_rateMedium:Hq_vs_Lq = fam_rateLow:Hq_vs_Lq", test = "Chisq")
+linearHypothesis(model, c("fam_rateMedium:Hq_vs_Lq = fam_rateLow:Hq_vs_Lq", "fam_rateHigh:Hq_vs_Lq = fam_rateLow:Hq_vs_Lq"),  test = "Chisq")
+
+## now lets test whether medium is different from low and high combined
+output2_high_low_combined <- output2
+levels(output2_high_low_combined$fam_rate)
+levels(output2_high_low_combined$fam_rate) <- c("High_low", "High_low", "Medium")
+levels(output2_high_low_combined$fam_rate)
+
+model_2 <- lmer(data = output2_high_low_combined,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate)
+summary(model_2)
+linearHypothesis(model, "fam_rateMedium:Hq_vs_Lq = fam_rateHigh_low:Hq_vs_Lq", test = "Chisq")
+
+output2_medium_low_combined <- output2
+levels(output2_medium_low_combined$fam_rate)
+levels(output2_medium_low_combined$fam_rate) <- c("High", "medium_low", "medium_low")
+levels(output2_medium_low_combined$fam_rate)
+
+model_3 <- lmer(data = output2_medium_low_combined,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate)
+summary(model_3)
+linearHypothesis(model_3, "fam_rateHigh:Hq_vs_Lq = fam_ratemedium_low:Hq_vs_Lq", test = "Chisq")
+```
+
+
+### Latex Tables for the regression model
+```{r}
+
+model <- lmer(data = output2,
+     formula = mean_estimate/avg_sigma ~ (1|ID) + (1|Publisher) + (1|Article) +
+                                   familiarity  + pol_leaning + pol_interest + fam_rate +
+                                   CRN_vs_NA:fam_rate + Hq_vs_Lq:fam_rate)
+```
