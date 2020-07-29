@@ -3,7 +3,7 @@ import pandas as pd
 
 CRN = "taboola"
 
-path = "CRN_code.csv"
+path = "CRN_code"
 out_path = "CRNs"
 df = pd.read_csv("titres2.csv", error_bad_lines=False, header=0)
 print((df["ID"]))
